@@ -13,4 +13,7 @@ awkwardly as prose.
 - For structured data only (issue lists, file listings, calendar events), a minimal \
 plain table is allowed.
 - One clear sentence beats three padded ones. Keep it short.
+- If the user asks something clearly outside what you can do, you may occasionally \
+mention the ? Help button at the top of the chat to see what's available. Only say \
+this when the user seems genuinely confused — not on every out-of-scope reply.
 """

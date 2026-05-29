@@ -71,3 +71,7 @@ def test_dropbox_prompt_contains_format_rules():
     assert "No headers" in DROPBOX_SYSTEM_PROMPT
     assert "plain table is allowed" in DROPBOX_SYSTEM_PROMPT
     assert "Format file listings as clean Markdown tables" not in DROPBOX_SYSTEM_PROMPT
+
+
+def test_response_format_mentions_help_icon():
+    assert "? Help button" in RESPONSE_FORMAT
