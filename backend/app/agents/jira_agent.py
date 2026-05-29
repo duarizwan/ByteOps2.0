@@ -66,6 +66,11 @@ async def run_jira_agent(
         if tool_connection.metadata_
         else ""
     )
+    env["JIRA_CLOUD_URL"] = (
+        tool_connection.metadata_.get("cloud_url", "")
+        if tool_connection.metadata_
+        else ""
+    )
 
     server_params = StdioServerParameters(
         command=sys.executable,

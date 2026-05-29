@@ -1,0 +1,372 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ===========================
+   ByteOps Design System
+   Matching Figma Prototype
+   =========================== */
+
+:root {
+  --font-size: 16px;
+
+  /* Corporate AI Design System — Light Mode */
+  --background: hsl(0, 0%, 98%);
+  --foreground: hsl(222.2, 84%, 10%);
+  --card: hsl(0, 0%, 100%);
+  --card-foreground: hsl(222.2, 84%, 10%);
+  --popover: hsl(0, 0%, 100%);
+  --popover-foreground: hsl(222.2, 84%, 10%);
+  --primary: hsl(221.2, 83.2%, 53.3%);
+  --primary-foreground: hsl(210, 40%, 98%);
+  --primary-glow: hsl(217.2, 91.2%, 59.8%);
+  --secondary: hsl(210, 40%, 96.1%);
+  --secondary-foreground: hsl(222.2, 47.4%, 11.2%);
+  --muted: hsl(210, 40%, 96.1%);
+  --muted-foreground: hsl(215.4, 16.3%, 46.9%);
+  --accent: hsl(210, 40%, 96.1%);
+  --accent-foreground: hsl(222.2, 47.4%, 11.2%);
+  --destructive: hsl(0, 84%, 60%);
+  --destructive-foreground: hsl(0, 0%, 98%);
+  --success: hsl(142, 76%, 36%);
+  --success-foreground: hsl(138, 76%, 97%);
+  --warning: hsl(38, 92%, 50%);
+  --warning-foreground: hsl(48, 96%, 89%);
+  --border: hsl(214.3, 31.8%, 91.4%);
+  --input: hsl(214.3, 31.8%, 91.4%);
+  --ring: hsl(221.2, 83.2%, 53.3%);
+
+  /* AI-Specific Colors — Light Mode */
+  --ai-bubble: hsl(217, 91%, 60%);
+  --user-bubble: hsl(210, 40%, 96.1%);
+  --context-bg: hsl(0, 0%, 100%);
+  --sidebar-bg: hsl(0, 0%, 100%);
+  --sidebar-border: hsl(214.3, 31.8%, 89%);
+  --chat-bg: hsl(210, 40%, 98%);
+
+  /* Font System */
+  --font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  --radius: 0.625rem;
+}
+
+/* --- Dark Mode --- */
+.dark {
+  --background: hsl(222.2, 84%, 4.9%);
+  --foreground: hsl(210, 40%, 98%);
+  --card: hsl(217.2, 32.6%, 17.5%);
+  --card-foreground: hsl(210, 40%, 98%);
+  --popover: hsl(217.2, 32.6%, 17.5%);
+  --popover-foreground: hsl(210, 40%, 98%);
+  --primary: hsl(221.2, 83.2%, 53.3%);
+  --primary-foreground: hsl(210, 40%, 98%);
+  --primary-glow: hsl(217.2, 91.2%, 59.8%);
+  --secondary: hsl(217.2, 32.6%, 17.5%);
+  --secondary-foreground: hsl(210, 40%, 98%);
+  --muted: hsl(217.2, 32.6%, 17.5%);
+  --muted-foreground: hsl(215, 20.2%, 65.1%);
+  --accent: hsl(217.2, 32.6%, 17.5%);
+  --accent-foreground: hsl(210, 40%, 98%);
+  --destructive: hsl(0, 84%, 60%);
+  --destructive-foreground: hsl(0, 0%, 98%);
+  --success: hsl(142, 76%, 36%);
+  --success-foreground: hsl(138, 76%, 97%);
+  --warning: hsl(38, 92%, 50%);
+  --warning-foreground: hsl(48, 96%, 89%);
+  --border: hsl(217.2, 32.6%, 17.5%);
+  --input: hsl(217.2, 32.6%, 17.5%);
+  --ring: hsl(221.2, 83.2%, 53.3%);
+
+  /* AI-Specific — Dark Mode */
+  --ai-bubble: hsl(217, 91%, 60%);
+  --user-bubble: hsl(215, 25%, 27%);
+  --context-bg: hsl(222, 47%, 11%);
+  --sidebar-bg: hsl(222, 47%, 6%);
+  --sidebar-border: hsl(217.2, 32.6%, 22%);
+  --chat-bg: hsl(220, 26%, 14%);
+}
+
+/* Tailwind v4 theme mapping */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-glow: var(--primary-glow);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ai-bubble: var(--ai-bubble);
+  --color-user-bubble: var(--user-bubble);
+  --color-context-bg: var(--context-bg);
+  --color-sidebar-bg: var(--sidebar-bg);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-chat-bg: var(--chat-bg);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: var(--font-inter), 'Inter', system-ui, sans-serif;
+}
+
+/* ===========================
+   Global Styles
+   =========================== */
+html {
+  font-size: var(--font-size);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-family);
+}
+
+/* Dashboard manages its own overflow on its root div (h-screen overflow-hidden).
+   Never lock the body — it breaks scrollable pages like the landing page. */
+html {
+  overflow-y: auto;
+}
+
+/* ===========================
+   Gradients & Shadows
+   =========================== */
+.gradient-primary {
+  background: linear-gradient(135deg, hsl(221.2, 83.2%, 53.3%), hsl(217.2, 91.2%, 59.8%));
+}
+
+/* Gradient text — clips the gradient through the text characters */
+.text-gradient-primary {
+  background: linear-gradient(135deg, hsl(221.2, 83.2%, 53.3%), hsl(217.2, 91.2%, 59.8%));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  display: inline-block;
+}
+
+.gradient-subtle {
+  background: linear-gradient(to bottom, hsl(222.2, 84%, 4.9%), hsl(217.2, 32.6%, 17.5%));
+}
+
+.gradient-ai {
+  background: linear-gradient(135deg, hsl(217, 91%, 60%), hsl(221, 83%, 53%));
+}
+
+.gradient-glow {
+  background: radial-gradient(circle, hsl(217.2, 91.2%, 59.8%), transparent);
+}
+
+.shadow-soft {
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.shadow-medium {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.shadow-glow {
+  box-shadow: 0 0 20px rgba(96, 165, 250, 0.3);
+}
+
+/* ===========================
+   Custom Scrollbar
+   =========================== */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(215 16% 47% / 0.2) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(215 16% 47% / 0.15);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: all 0.2s ease;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: hsl(215 16% 47% / 0.3);
+  background-clip: padding-box;
+}
+
+.dark .custom-scrollbar {
+  scrollbar-color: hsl(215 20% 65% / 0.3) transparent;
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(215 20% 65% / 0.2);
+  background-clip: padding-box;
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: hsl(215 20% 65% / 0.4);
+  background-clip: padding-box;
+}
+
+/* ===========================
+   Panel Resize Handle
+   =========================== */
+[data-panel-group-direction="horizontal"]>[data-resize-handle] {
+  width: 2px;
+  background: var(--border);
+  transition: background 150ms ease;
+}
+
+[data-panel-group-direction="horizontal"]>[data-resize-handle]:hover,
+[data-panel-group-direction="horizontal"]>[data-resize-handle][data-resize-handle-active] {
+  background: var(--primary);
+}
+
+/* ===========================
+   Clerk Auth — Reset locked styles
+   Clerk uses high-specificity internal CSS that can't be
+   overridden with Tailwind classes alone — use !important here.
+   =========================== */
+
+/* Root container — center the Clerk component within its parent */
+.cl-rootBox {
+  width: 100% !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+}
+
+/* Strip the outer card box shadow/border entirely */
+.cl-cardBox {
+  box-shadow: none !important;
+  border: none !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  width: 100% !important;
+}
+
+/* Strip the inner card shadow/padding/background */
+.cl-card {
+  box-shadow: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  width: 100% !important;
+}
+
+/* Hide Clerk's own header (we render our own above) */
+.cl-header {
+  display: none !important;
+}
+
+/* Hide Clerk footer entirely — "Secured by Clerk / Development mode" banner.
+   In production this just shows the Clerk logo; hidden for a cleaner layout. */
+.cl-footer {
+  display: none !important;
+}
+
+/* Also kill the internal footer wrapper that adds 16px 32px padding */
+.cl-internal-1dauvpw {
+  display: none !important;
+}
+
+/* Social buttons — flat style */
+.cl-socialButtonsBlockButton {
+  border: 1px solid hsl(214.3, 31.8%, 91.4%) !important;
+  background: #f8fafc !important;
+  box-shadow: none !important;
+  border-radius: 0.625rem !important;
+}
+.cl-socialButtonsBlockButton:hover {
+  background: #f1f5f9 !important;
+}
+
+/* Form inputs — flat style */
+.cl-formFieldInput {
+  background: #f8fafc !important;
+  border: 1px solid hsl(214.3, 31.8%, 91.4%) !important;
+  box-shadow: none !important;
+  border-radius: 0.625rem !important;
+}
+.cl-formFieldInput:focus {
+  border-color: hsl(221.2, 83.2%, 53.3%) !important;
+  box-shadow: 0 0 0 3px hsl(221.2, 83.2%, 53.3% / 0.1) !important;
+  background: #ffffff !important;
+}
+
+/* Primary button */
+.cl-formButtonPrimary {
+  background: hsl(221.2, 83.2%, 53.3%) !important;
+  box-shadow: none !important;
+  border-radius: 0.625rem !important;
+}
+.cl-formButtonPrimary:hover {
+  background: hsl(221.2, 83.2%, 45%) !important;
+}
+
+/* ===========================
+   Message appear animation
+   =========================== */
+@keyframes messageIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.message-in {
+  animation: messageIn 0.25s ease-out both;
+}
+
+/* ===========================
+   Landing page — entrance + orbs
+   =========================== */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(22px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes orbFloat {
+  0%, 100% { transform: translateY(0px)   translateX(0px)   scale(1);    }
+  33%       { transform: translateY(-28px) translateX(14px)  scale(1.04); }
+  66%       { transform: translateY(12px)  translateX(-10px) scale(0.97); }
+}
+
+.anim-fade-up {
+  opacity: 0;
+  animation: fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.anim-delay-1 { animation-delay: 0.05s; }
+.anim-delay-2 { animation-delay: 0.18s; }
+.anim-delay-3 { animation-delay: 0.32s; }
+.anim-delay-4 { animation-delay: 0.48s; }
+.anim-delay-5 { animation-delay: 0.68s; }
+
+.orb-float {
+  animation: orbFloat 14s ease-in-out infinite;
+}

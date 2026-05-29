@@ -1,0 +1,568 @@
+"use client";
+
+import { useState, useRef, useEffect } from "react";
+import Link from "next/link";
+import {
+    ChevronLeft,
+    ChevronRight,
+    Plus,
+    MessageCircle,
+    Trash2,
+    Loader2,
+    MoreHorizontal,
+    Pencil,
+    Check,
+    X,
+    AlertCircle,
+    CheckCircle2,
+    ExternalLink,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { ConversationSummary } from "@/hooks/use-conversations";
+import { getBrandIconUrl } from "@/lib/brand-icons";
+import { useToolConnections, type ToolType } from "@/hooks/use-tool-connections";
+
+/* ========================
+   Tool registry — IDs must match backend ToolType enum values
+   ======================== */
+const TOOL_REGISTRY = [
+    { id: "gmail" as ToolType,    name: "Gmail"    },
+    { id: "calendar" as ToolType, name: "Calendar" },
+    { id: "slack" as ToolType,    name: "Slack"    },
+    { id: "jira" as ToolType,     name: "JIRA"     },
+    { id: "trello" as ToolType,   name: "Trello"   },
+    { id: "dropbox" as ToolType,  name: "Dropbox"  },
+    { id: "github" as ToolType,   name: "GitHub"   },
+];
+
+/* ========================
+   Date grouping helper
+   ======================== */
+function formatDate(isoString: string): string {
+    const date = new Date(isoString);
+    const now = new Date();
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+
+    if (date.toDateString() === now.toDateString()) return "Today";
+    if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+/* ========================
+   Props
+   ======================== */
+interface CollapsibleSidebarProps {
+    isCollapsed: boolean;
+    onToggleCollapse: () => void;
+    conversations: ConversationSummary[];
+    isLoadingConversations: boolean;
+    activeConversationId: string | null;
+    onNewChat: () => void;
+    onSelectConversation: (id: string) => void;
+    onDeleteConversation: (id: string) => Promise<boolean>;
+    onRenameConversation?: (id: string, title: string) => Promise<ConversationSummary | null>;
+}
+
+/* ========================
+   ConversationItem — handles its own dropdown + inline rename state
+   ======================== */
+interface ConversationItemProps {
+    chat: ConversationSummary;
+    isActive: boolean;
+    onSelect: () => void;
+    onDelete: () => Promise<boolean>;
+    onRename?: (title: string) => Promise<ConversationSummary | null>;
+}
+
+function ConversationItem({ chat, isActive, onSelect, onDelete, onRename }: ConversationItemProps) {
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [isRenaming, setIsRenaming] = useState(false);
+    const [renameValue, setRenameValue] = useState(chat.title);
+    const [isSavingRename, setIsSavingRename] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
+    const renameInputRef = useRef<HTMLInputElement>(null);
+
+    // Close dropdown on outside click
+    useEffect(() => {
+        if (!menuOpen) return;
+        const handleClickOutside = (e: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+                setMenuOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [menuOpen]);
+
+    // Focus input when rename mode activates
+    useEffect(() => {
+        if (isRenaming) {
+            renameInputRef.current?.focus();
+            renameInputRef.current?.select();
+        }
+    }, [isRenaming]);
+
+    const handleMenuClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setMenuOpen((v) => !v);
+    };
+
+    const handleRenameClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setMenuOpen(false);
+        setRenameValue(chat.title);
+        setIsRenaming(true);
+    };
+
+    const handleDeleteClick = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setMenuOpen(false);
+        if (!confirm("Delete this conversation?")) return;
+        setIsDeleting(true);
+        await onDelete();
+        setIsDeleting(false);
+    };
+
+    const handleRenameSubmit = async () => {
+        const trimmed = renameValue.trim();
+        if (!trimmed || trimmed === chat.title) {
+            setIsRenaming(false);
+            return;
+        }
+        setIsSavingRename(true);
+        await onRename?.(trimmed);
+        setIsRenaming(false);
+        setIsSavingRename(false);
+    };
+
+    const handleRenameKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            handleRenameSubmit();
+        } else if (e.key === "Escape") {
+            setIsRenaming(false);
+            setRenameValue(chat.title);
+        }
+    };
+
+    return (
+        <div
+            onClick={isRenaming ? undefined : onSelect}
+            className={cn(
+                "group relative flex items-center gap-2 p-2.5 rounded-xl transition-all",
+                isRenaming ? "cursor-default" : "cursor-pointer",
+                isActive
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+            )}
+        >
+            <MessageCircle className="w-4 h-4 flex-shrink-0" />
+
+            <div className="flex-1 min-w-0">
+                {isRenaming ? (
+                    // Inline rename input
+                    <div className="flex items-center gap-1">
+                        <input
+                            ref={renameInputRef}
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onKeyDown={handleRenameKeyDown}
+                            onBlur={handleRenameSubmit}
+                            className="flex-1 min-w-0 text-sm bg-background border border-primary rounded px-1.5 py-0.5 outline-none text-foreground"
+                            disabled={isSavingRename}
+                        />
+                        {isSavingRename ? (
+                            <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
+                        ) : (
+                            <>
+                                <button
+                                    onMouseDown={(e) => { e.preventDefault(); handleRenameSubmit(); }}
+                                    className="text-green-500 hover:text-green-400 flex-shrink-0"
+                                    title="Confirm"
+                                >
+                                    <Check className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                    onMouseDown={(e) => { e.preventDefault(); setIsRenaming(false); setRenameValue(chat.title); }}
+                                    className="text-muted-foreground hover:text-foreground flex-shrink-0"
+                                    title="Cancel"
+                                >
+                                    <X className="w-3.5 h-3.5" />
+                                </button>
+                            </>
+                        )}
+                    </div>
+                ) : (
+                    <>
+                        <p className="text-sm truncate">{chat.title}</p>
+                        <p className="text-xs opacity-60">{formatDate(chat.updated_at)}</p>
+                    </>
+                )}
+            </div>
+
+            {/* Three-dot menu button — only shown when not renaming */}
+            {!isRenaming && (
+                <div className="relative" ref={menuRef}>
+                    <button
+                        onClick={handleMenuClick}
+                        disabled={isDeleting}
+                        className={cn(
+                            "w-6 h-6 rounded-lg flex items-center justify-center transition-opacity",
+                            "opacity-0 group-hover:opacity-100",
+                            isActive && "opacity-60",
+                            "hover:bg-accent-foreground/10"
+                        )}
+                        title="More options"
+                    >
+                        {isDeleting ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                            <MoreHorizontal className="w-3.5 h-3.5" />
+                        )}
+                    </button>
+
+                    {/* Dropdown menu */}
+                    {menuOpen && (
+                        <div className="absolute right-0 top-7 z-50 w-36 bg-popover border border-border rounded-xl shadow-lg overflow-hidden">
+                            <button
+                                onClick={handleRenameClick}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent transition-colors text-left"
+                            >
+                                <Pencil className="w-3.5 h-3.5" />
+                                Rename
+                            </button>
+                            <button
+                                onClick={handleDeleteClick}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-destructive/10 text-destructive transition-colors text-left"
+                            >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                Delete
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+/* ========================
+   Connect Tool Modal
+   ======================== */
+function ConnectToolModal({ onClose }: { onClose: () => void }) {
+    const { isConnected, initiateConnect, disconnect } = useToolConnections();
+    const [connecting, setConnecting] = useState<ToolType | null>(null);
+    const [disconnecting, setDisconnecting] = useState<ToolType | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const overlayRef = useRef<HTMLDivElement>(null);
+
+    // Close on Escape
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+        document.addEventListener("keydown", onKey);
+        return () => document.removeEventListener("keydown", onKey);
+    }, [onClose]);
+
+    const handleConnect = async (toolId: ToolType) => {
+        setError(null);
+        setConnecting(toolId);
+        try {
+            await initiateConnect(toolId);
+            // initiateConnect redirects to OAuth — browser navigates away
+        } catch (err) {
+            setError(err instanceof Error ? err.message : `Failed to connect ${toolId}`);
+        } finally {
+            setConnecting(null);
+        }
+    };
+
+    const handleDisconnect = async (toolId: ToolType) => {
+        setError(null);
+        setDisconnecting(toolId);
+        try {
+            await disconnect(toolId);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : `Failed to disconnect ${toolId}`);
+        } finally {
+            setDisconnecting(null);
+        }
+    };
+
+    return (
+        <div
+            ref={overlayRef}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
+        >
+            <div className="w-full max-w-sm mx-4 bg-card border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+                    <div>
+                        <h2 className="font-semibold text-foreground text-base">Connect a Tool</h2>
+                        <p className="text-xs text-muted-foreground mt-0.5">Select a tool to connect via OAuth</p>
+                    </div>
+                    <button
+                        onClick={onClose}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+
+                {/* Error banner */}
+                {error && (
+                    <div className="mx-4 mt-3 flex items-start gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded-xl">
+                        <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                        <span className="flex-1">{error}</span>
+                        <button onClick={() => setError(null)} className="flex-shrink-0 hover:opacity-70">
+                            <X className="w-3.5 h-3.5" />
+                        </button>
+                    </div>
+                )}
+
+                {/* Tool list */}
+                <div className="flex flex-col gap-1 p-3 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                    {TOOL_REGISTRY.map((tool) => {
+                        const connected = isConnected(tool.id);
+                        const iconUrl = getBrandIconUrl(tool.id);
+                        const isConnectingThis = connecting === tool.id;
+                        const isDisconnectingThis = disconnecting === tool.id;
+                        const busy = isConnectingThis || isDisconnectingThis;
+
+                        return (
+                            <div
+                                key={tool.id}
+                                className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-accent/50 transition-colors"
+                            >
+                                {/* Icon */}
+                                <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                    {iconUrl ? (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img src={iconUrl} alt={tool.name} width={20} height={20} className="object-contain" />
+                                    ) : (
+                                        <span className="text-xs font-bold text-muted-foreground">{tool.name[0]}</span>
+                                    )}
+                                </div>
+
+                                {/* Name + status */}
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-foreground">{tool.name}</p>
+                                    {connected ? (
+                                        <p className="text-xs text-emerald-500 flex items-center gap-1">
+                                            <CheckCircle2 className="w-3 h-3" /> Connected
+                                        </p>
+                                    ) : (
+                                        <p className="text-xs text-muted-foreground">Not connected</p>
+                                    )}
+                                </div>
+
+                                {/* Action button */}
+                                {connected ? (
+                                    <button
+                                        onClick={() => handleDisconnect(tool.id)}
+                                        disabled={busy}
+                                        className="text-xs px-3 py-1.5 rounded-lg bg-destructive/10 text-destructive hover:bg-destructive hover:text-white transition-colors disabled:opacity-50 flex items-center gap-1"
+                                    >
+                                        {isDisconnectingThis ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+                                        Disconnect
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={() => handleConnect(tool.id)}
+                                        disabled={busy}
+                                        className="text-xs px-3 py-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-1"
+                                    >
+                                        {isConnectingThis ? (
+                                            <Loader2 className="w-3 h-3 animate-spin" />
+                                        ) : (
+                                            <ExternalLink className="w-3 h-3" />
+                                        )}
+                                        Connect
+                                    </button>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+
+                {/* Footer */}
+                <div className="px-5 py-3 border-t border-border">
+                    <p className="text-xs text-muted-foreground text-center">
+                        You&apos;ll be redirected to the tool&apos;s OAuth page to authorise access.
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/* ========================
+   Main CollapsibleSidebar Component
+   ======================== */
+export function CollapsibleSidebar({
+    isCollapsed,
+    onToggleCollapse,
+    conversations,
+    isLoadingConversations,
+    activeConversationId,
+    onNewChat,
+    onSelectConversation,
+    onDeleteConversation,
+    onRenameConversation,
+}: CollapsibleSidebarProps) {
+    const [showConnectModal, setShowConnectModal] = useState(false);
+
+    // Live connection status from the backend
+    const { isConnected } = useToolConnections();
+
+    const getStatusColor = (toolId: ToolType) => {
+        if (isConnected(toolId))
+            return "bg-success shadow-[0_0_6px_2px_rgba(34,197,94,0.45)] transition-all duration-300";
+        return "bg-muted-foreground transition-all duration-300";
+    };
+
+    return (
+        <div
+            className={cn(
+                "bg-sidebar-bg border-r border-sidebar-border transition-all duration-300 flex flex-col h-full rounded-r-2xl",
+                isCollapsed ? "w-16" : "w-64"
+            )}
+        >
+            {/* Collapse Toggle */}
+            <div className={cn("p-3 flex items-center", isCollapsed ? "flex-col gap-1" : "justify-between")}>
+                <button
+                    onClick={onToggleCollapse}
+                    className="w-9 h-9 hover:bg-accent rounded-xl transition-colors flex items-center justify-center"
+                    title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                >
+                    {isCollapsed ? (
+                        <ChevronRight className="w-4 h-4" />
+                    ) : (
+                        <ChevronLeft className="w-4 h-4" />
+                    )}
+                </button>
+                {/* New chat button visible in collapsed mode */}
+                {isCollapsed && (
+                    <button
+                        onClick={onNewChat}
+                        className="w-9 h-9 hover:bg-accent rounded-xl transition-colors flex items-center justify-center text-muted-foreground hover:text-foreground"
+                        title="New Chat"
+                    >
+                        <Plus className="w-4 h-4" />
+                    </button>
+                )}
+            </div>
+
+            {/* Chat History Section */}
+            {!isCollapsed && (
+                <div className="px-3 mb-2 flex-1 flex flex-col min-h-0">
+                    <button
+                        onClick={onNewChat}
+                        className="w-full bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium py-2.5 rounded-xl flex items-center justify-center gap-2 mb-3 transition-colors"
+                    >
+                        <Plus className="w-4 h-4" />
+                        New Chat
+                    </button>
+
+                    <p className="text-xs font-semibold tracking-wider text-muted-foreground mb-2 px-3 uppercase">Chats</p>
+
+                    <div className="space-y-1 flex-1 overflow-y-auto custom-scrollbar pr-1">
+                        {isLoadingConversations ? (
+                            <div className="flex items-center justify-center py-3">
+                                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                            </div>
+                        ) : conversations.length === 0 ? (
+                            <p className="text-xs text-muted-foreground px-3 py-2 italic">
+                                No conversations yet
+                            </p>
+                        ) : (
+                            conversations.map((chat) => (
+                                <ConversationItem
+                                    key={chat.id}
+                                    chat={chat}
+                                    isActive={activeConversationId === chat.id}
+                                    onSelect={() => onSelectConversation(chat.id)}
+                                    onDelete={() => onDeleteConversation(chat.id)}
+                                    onRename={
+                                        onRenameConversation
+                                            ? (title) => onRenameConversation(chat.id, title)
+                                            : undefined
+                                    }
+                                />
+                            ))
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Tool Connections Header */}
+            {!isCollapsed && (
+                <div className="px-3 mb-2 border-t border-border pt-4 flex-shrink-0">
+                    <p className="text-xs font-semibold tracking-wider text-muted-foreground mb-2 px-3 uppercase">Tools</p>
+                </div>
+            )}
+
+            {/* Tool List */}
+            <div className="flex flex-col gap-1 px-2 overflow-y-auto custom-scrollbar pb-4">
+                {TOOL_REGISTRY.map((tool) => {
+                    const connected = isConnected(tool.id);
+                    const iconUrl = getBrandIconUrl(tool.id);
+                    return (
+                        <Link
+                            key={tool.id}
+                            href="/settings"
+                            title={connected ? `${tool.name} — connected` : `${tool.name} — click to connect`}
+                            className={cn(
+                                "relative flex items-center gap-3 p-3 rounded-xl transition-all",
+                                connected
+                                    ? "text-foreground hover:bg-accent"
+                                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                            )}
+                        >
+                            {/* Icon wrapped in relative container so the status dot overlays it */}
+                            <div className="relative flex-shrink-0 w-4 h-4">
+                                {iconUrl ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img src={iconUrl} alt={tool.name} width={16} height={16} className="w-4 h-4 object-contain" />
+                                ) : (
+                                    <div className="w-4 h-4 rounded bg-muted" />
+                                )}
+                                {isCollapsed && (
+                                    <div className={cn("absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full ring-1 ring-sidebar-bg", getStatusColor(tool.id))} />
+                                )}
+                            </div>
+
+                            {!isCollapsed && (
+                                <>
+                                    <span className="text-sm font-medium flex-1 truncate">
+                                        {tool.name}
+                                    </span>
+                                    <div className={cn("w-2 h-2 rounded-full flex-shrink-0", getStatusColor(tool.id))} />
+                                </>
+                            )}
+                        </Link>
+                    );
+                })}
+            </div>
+
+            {/* Connect New Tool — opens modal */}
+            {!isCollapsed && (
+                <div className="p-3 mt-auto">
+                    <button
+                        onClick={() => setShowConnectModal(true)}
+                        className="w-full bg-accent hover:bg-accent/80 text-accent-foreground text-sm font-medium py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors"
+                    >
+                        <Plus className="w-4 h-4" />
+                        Connect New Tool
+                    </button>
+                </div>
+            )}
+
+            {showConnectModal && (
+                <ConnectToolModal onClose={() => setShowConnectModal(false)} />
+            )}
+        </div>
+    );
+}

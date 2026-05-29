@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ByteOps — Design Directions</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: #0f0f0f; color: #fff; }
+
+  .page { padding: 32px; max-width: 1400px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 600; margin-bottom: 6px; color: #fff; }
+  .subtitle { font-size: 14px; color: #888; margin-bottom: 32px; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 8px; margin-bottom: 28px; }
+  .tab {
+    padding: 10px 22px; border-radius: 10px; font-size: 14px; font-weight: 500;
+    cursor: pointer; border: 1px solid #2a2a2a; background: #1a1a1a; color: #888;
+    transition: all 0.2s;
+  }
+  .tab:hover { border-color: #444; color: #ccc; }
+  .tab.active { background: #fff; color: #000; border-color: #fff; }
+
+  /* Direction panels */
+  .direction { display: none; }
+  .direction.visible { display: block; }
+
+  /* ─── DIRECTION A: Refined Corporate ─── */
+  .dir-a {
+    --bg: #f5f7fa;
+    --surface: #ffffff;
+    --border: #e2e8f0;
+    --text: #0f172a;
+    --muted: #64748b;
+    --primary: #2563eb;
+    --primary-light: #eff6ff;
+    --sidebar: #ffffff;
+    --chat-bg: #f0f4f8;
+    --ai-bubble: linear-gradient(135deg, #2563eb, #3b82f6);
+    --user-bubble: #eef2ff;
+    --input-bg: #ffffff;
+    --radius: 12px;
+    --shadow: 0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+  }
+  /* ─── DIRECTION B: Modern Dark-First ─── */
+  .dir-b {
+    --bg: #080c14;
+    --surface: #0f1629;
+    --border: #1e2d4a;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --primary: #818cf8;
+    --primary-light: rgba(129,140,248,0.12);
+    --sidebar: #0b1120;
+    --chat-bg: #0d1525;
+    --ai-bubble: linear-gradient(135deg, #6366f1, #818cf8);
+    --user-bubble: #1a2540;
+    --input-bg: #0f1a2e;
+    --radius: 14px;
+    --shadow: 0 0 0 1px rgba(129,140,248,0.08), 0 8px 32px rgba(0,0,0,0.4);
+  }
+  /* ─── DIRECTION C: Clean Minimal ─── */
+  .dir-c {
+    --bg: #fafafa;
+    --surface: #ffffff;
+    --border: #ebebeb;
+    --text: #111111;
+    --muted: #999999;
+    --primary: #111111;
+    --primary-light: #f5f5f5;
+    --sidebar: #fafafa;
+    --chat-bg: #ffffff;
+    --ai-bubble: #f0f0f0;
+    --ai-bubble-text: #111;
+    --user-bubble: #111111;
+    --user-bubble-text: #ffffff;
+    --input-bg: #f5f5f5;
+    --radius: 16px;
+    --shadow: none;
+  }
+
+  .dashboard {
+    background: var(--bg);
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid #2a2a2a;
+    height: 540px;
+    display: flex;
+    flex-direction: column;
+    font-size: 12px;
+    color: var(--text);
+  }
+
+  /* Top Bar */
+  .topbar {
+    height: 52px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    flex-shrink: 0;
+  }
+  .topbar-brand { display: flex; align-items: center; gap: 10px; }
+  .brand-icon {
+    width: 32px; height: 32px; border-radius: 9px;
+    background: var(--ai-bubble);
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-size: 14px;
+  }
+  .brand-name { font-weight: 700; font-size: 15px; color: var(--text); }
+  .brand-tagline { font-size: 10px; color: var(--muted); }
+  .topbar-actions { display: flex; align-items: center; gap: 8px; }
+  .icon-btn {
+    width: 32px; height: 32px; border-radius: 9px;
+    background: var(--primary-light);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; cursor: pointer; color: var(--muted);
+  }
+  .avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--primary); }
+
+  /* Body */
+  .body { display: flex; flex: 1; overflow: hidden; }
+
+  /* Sidebar */
+  .sidebar {
+    width: 200px; flex-shrink: 0;
+    background: var(--sidebar);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    padding: 12px 10px;
+    overflow: hidden;
+  }
+  .new-chat-btn {
+    width: 100%; padding: 9px; border-radius: var(--radius);
+    background: var(--primary);
+    color: white; font-size: 12px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    margin-bottom: 14px; cursor: pointer;
+  }
+  .dir-c .new-chat-btn { color: #fff; }
+  .section-label { font-size: 10px; color: var(--muted); font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding: 0 6px; margin-bottom: 6px; }
+  .convo-item {
+    display: flex; align-items: center; gap: 7px;
+    padding: 7px 8px; border-radius: 9px;
+    color: var(--muted); font-size: 11.5px; cursor: pointer; margin-bottom: 2px;
+  }
+  .convo-item.active { background: var(--primary-light); color: var(--text); }
+  .convo-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--primary); opacity: 0.6; flex-shrink: 0; }
+  .divider { height: 1px; background: var(--border); margin: 10px 0; }
+  .tool-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 8px; border-radius: 9px;
+    color: var(--muted); font-size: 11.5px; margin-bottom: 2px; cursor: pointer;
+  }
+  .tool-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .tool-dot.green { background: #22c55e; }
+  .tool-dot.gray { background: #4b5563; }
+
+  /* Chat Area */
+  .chat {
+    flex: 1;
+    background: var(--chat-bg);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .chat-header {
+    padding: 14px 18px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+  .chat-title { font-weight: 600; font-size: 13px; color: var(--text); }
+  .chat-sub { font-size: 10px; color: var(--muted); margin-top: 1px; }
+  .messages { flex: 1; padding: 16px 18px; overflow: hidden; display: flex; flex-direction: column; gap: 14px; }
+  .msg { display: flex; gap: 9px; }
+  .msg.user { flex-direction: row-reverse; }
+  .msg-avatar {
+    width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px;
+  }
+  .msg-avatar.ai { background: var(--ai-bubble); color: white; }
+  .msg-avatar.user { background: var(--primary); color: white; }
+  .bubble {
+    max-width: 70%; padding: 9px 13px; border-radius: 12px;
+    font-size: 12px; line-height: 1.55;
+  }
+  .bubble.ai {
+    background: var(--ai-bubble);
+    color: white;
+    box-shadow: var(--shadow);
+  }
+  /* for minimal, AI bubble is light */
+  .dir-c .bubble.ai { background: var(--ai-bubble); color: var(--ai-bubble-text); }
+  .bubble.user {
+    background: var(--user-bubble);
+    color: var(--text);
+  }
+  .dir-c .bubble.user { background: var(--user-bubble); color: var(--user-bubble-text); }
+
+  /* Suggested prompts */
+  .suggestions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+  .suggestion-chip {
+    padding: 6px 11px; border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--surface); color: var(--muted);
+    font-size: 11px; cursor: pointer;
+  }
+
+  /* Tool call pill */
+  .tool-call {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: rgba(255,255,255,0.15); border-radius: 6px;
+    padding: 3px 8px; font-size: 10px; margin-top: 5px;
+  }
+  .dir-c .bubble.ai .tool-call { background: rgba(0,0,0,0.08); }
+  .tool-call-dot { width: 5px; height: 5px; border-radius: 50%; background: #4ade80; }
+
+  /* Input bar */
+  .input-bar {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    display: flex; align-items: flex-end; gap: 10px;
+    flex-shrink: 0;
+  }
+  .input-field {
+    flex: 1; background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px; padding: 9px 12px;
+    color: var(--muted); font-size: 12px;
+  }
+  .send-btn {
+    width: 34px; height: 34px; border-radius: 10px;
+    background: var(--ai-bubble);
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-size: 14px; flex-shrink: 0;
+  }
+  .dir-c .send-btn { background: var(--primary); }
+  .action-btn {
+    width: 34px; height: 34px; border-radius: 10px;
+    background: transparent;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 14px; flex-shrink: 0;
+  }
+
+  /* Context Panel */
+  .context-panel {
+    width: 220px; flex-shrink: 0;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .ctx-header {
+    padding: 14px 14px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .ctx-title { font-weight: 600; font-size: 13px; color: var(--text); }
+  .ctx-sub { font-size: 10px; color: var(--muted); margin-top: 1px; }
+  .tabs-row {
+    display: flex; padding: 10px 10px 0;
+    gap: 4px;
+  }
+  .ctx-tab {
+    flex: 1; padding: 6px 4px; border-radius: 8px;
+    font-size: 10px; font-weight: 600; text-align: center;
+    color: var(--muted); cursor: pointer;
+  }
+  .ctx-tab.active { background: var(--primary-light); color: var(--text); }
+  .notif-list { padding: 10px; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+  .notif-card {
+    background: var(--chat-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px;
+  }
+  .notif-top { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+  .notif-icon {
+    width: 24px; height: 24px; border-radius: 7px;
+    background: var(--primary-light);
+    display: flex; align-items: center; justify-content: center; font-size: 11px;
+  }
+  .notif-badge {
+    padding: 2px 7px; border-radius: 10px; font-size: 9px; font-weight: 600;
+    background: rgba(239,68,68,0.12); color: #ef4444;
+  }
+  .notif-title { font-size: 11px; font-weight: 500; color: var(--text); margin-bottom: 3px; line-height: 1.4; }
+  .notif-meta { font-size: 10px; color: var(--muted); }
+
+  /* Glow effect for B only */
+  .dir-b .bubble.ai { box-shadow: 0 0 20px rgba(129,140,248,0.25); }
+  .dir-b .send-btn { box-shadow: 0 0 12px rgba(129,140,248,0.3); }
+  .dir-b .new-chat-btn { box-shadow: 0 0 10px rgba(129,140,248,0.2); }
+  .dir-b .notif-badge { background: rgba(239,68,68,0.2); }
+  .dir-b .brand-icon { box-shadow: 0 0 14px rgba(129,140,248,0.35); }
+
+  /* Glassmorphism for A */
+  .dir-a .topbar { backdrop-filter: blur(12px); background: rgba(255,255,255,0.9); }
+  .dir-a .input-bar { backdrop-filter: blur(8px); }
+
+  /* Description strip */
+  .desc-strip {
+    margin-top: 16px; padding: 16px 18px;
+    background: #1a1a1a; border-radius: 12px; border: 1px solid #2a2a2a;
+  }
+  .desc-strip h3 { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .desc-strip p { font-size: 13px; color: #999; line-height: 1.6; }
+  .tags { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .tag {
+    padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 500;
+    background: #222; border: 1px solid #333; color: #aaa;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>ByteOps — Design Directions (Detailed)</h1>
+  <p class="subtitle">Full dashboard mockup for each style. Click a tab to preview.</p>
+
+  <div class="tabs">
+    <div class="tab active" onclick="show('a', this)">A — Refined Corporate</div>
+    <div class="tab" onclick="show('b', this)">B — Modern Dark-First</div>
+    <div class="tab" onclick="show('c', this)">C — Clean & Minimal</div>
+  </div>
+
+  <!-- ═══════════════ DIRECTION A ═══════════════ -->
+  <div class="direction dir-a visible" id="dir-a">
+    <div class="dashboard">
+      <!-- Topbar -->
+      <div class="topbar">
+        <div class="topbar-brand">
+          <div class="brand-icon">✦</div>
+          <div>
+            <div class="brand-name">ByteOps</div>
+            <div class="brand-tagline">AI Work Assistant</div>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <div class="icon-btn">☀</div>
+          <div class="icon-btn">⚙</div>
+          <div class="avatar"></div>
+        </div>
+      </div>
+      <!-- Body -->
+      <div class="body">
+        <!-- Sidebar -->
+        <div class="sidebar">
+          <div class="new-chat-btn">+ New Chat</div>
+          <div class="section-label">Chat History</div>
+          <div class="convo-item active"><div class="convo-dot"></div>Summarize emails</div>
+          <div class="convo-item"><div class="convo-dot" style="opacity:0.3"></div>Calendar check</div>
+          <div class="convo-item"><div class="convo-dot" style="opacity:0.3"></div>GitHub PRs</div>
+          <div class="divider"></div>
+          <div class="section-label">Connected Tools</div>
+          <div class="tool-item"><div class="tool-dot green"></div>Gmail</div>
+          <div class="tool-item"><div class="tool-dot gray"></div>Slack</div>
+          <div class="tool-item"><div class="tool-dot gray"></div>GitHub</div>
+          <div class="tool-item"><div class="tool-dot gray"></div>JIRA</div>
+        </div>
+        <!-- Chat -->
+        <div class="chat">
+          <div class="chat-header">
+            <div class="chat-title">ByteOps AI</div>
+            <div class="chat-sub">Your AI productivity assistant</div>
+          </div>
+          <div class="messages">
+            <div class="msg">
+              <div class="msg-avatar ai">✦</div>
+              <div class="bubble ai">
+                Hello! I'm your ByteOps AI assistant. I can help with Gmail, Calendar, and more.
+                <div class="suggestions">
+                  <span class="suggestion-chip">Summarize emails</span>
+                  <span class="suggestion-chip">What's on my calendar?</span>
+                </div>
+              </div>
+            </div>
+            <div class="msg user">
+              <div class="msg-avatar user">R</div>
+              <div class="bubble user">Summarize my unread emails from today</div>
+            </div>
+            <div class="msg">
+              <div class="msg-avatar ai">✦</div>
+              <div class="bubble ai">
+                <div class="tool-call"><div class="tool-call-dot"></div>Gmail — fetching unread…</div>
+                <br>You have <strong>4 unread emails</strong>. The highest priority is from your manager about the Q3 review meeting scheduled for Thursday.
+              </div>
+            </div>
+          </div>
+          <div class="input-bar">
+            <div class="input-field">Type your message...</div>
+            <div class="action-btn">📎</div>
+            <div class="action-btn">🎤</div>
+            <div class="send-btn">➤</div>
+          </div>
+        </div>
+        <!-- Context Panel -->
+        <div class="context-panel">
+          <div class="ctx-header">
+            <div class="ctx-title">Activity</div>
+            <div class="ctx-sub">Your workspace overview</div>
+          </div>
+          <div class="tabs-row">
+            <div class="ctx-tab">Flows</div>
+            <div class="ctx-tab active">Alerts</div>
+            <div class="ctx-tab">Tasks</div>
+          </div>
+          <div class="notif-list">
+            <div class="notif-card">
+              <div class="notif-top">
+                <div class="notif-icon">📧</div>
+                <span class="notif-badge">urgent</span>
+              </div>
+              <div class="notif-title">Q3 Review — reply needed by EOD</div>
+              <div class="notif-meta">📧 Gmail · 12m ago</div>
+            </div>
+            <div class="notif-card">
+              <div class="notif-top">
+                <div class="notif-icon">📅</div>
+                <span class="notif-badge" style="background:rgba(245,158,11,0.12);color:#f59e0b;">medium</span>
+              </div>
+              <div class="notif-title">Team standup in 30 minutes</div>
+              <div class="notif-meta">📅 Calendar · 5m ago</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="desc-strip">
+      <h3>A — Refined Corporate</h3>
+      <p>Elevates the current design with tighter visual hierarchy, glassmorphism on the topbar/input, subtle card shadows, and crisper spacing. Stays professional and trustworthy — same blue primary, better execution.</p>
+      <div class="tags">
+        <span class="tag">Inter font</span>
+        <span class="tag">Blue primary</span>
+        <span class="tag">Light + dark</span>
+        <span class="tag">Glassmorphism</span>
+        <span class="tag">Inspired by: Linear, Notion</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ DIRECTION B ═══════════════ -->
+  <div class="direction dir-b" id="dir-b">
+    <div class="dashboard">
+      <div class="topbar">
+        <div class="topbar-brand">
+          <div class="brand-icon" style="box-shadow:0 0 14px rgba(129,140,248,0.4)">✦</div>
+          <div>
+            <div class="brand-name">ByteOps</div>
+            <div class="brand-tagline">AI Work Assistant</div>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <div class="icon-btn">☀</div>
+          <div class="icon-btn">⚙</div>
+          <div class="avatar" style="background:linear-gradient(135deg,#818cf8,#6366f1)"></div>
+        </div>
+      </div>
+      <div class="body">
+        <div class="sidebar">
+          <div class="new-chat-btn" style="background:linear-gradient(135deg,#6366f1,#818cf8)">+ New Chat</div>
+          <div class="section-label">Chat History</div>
+          <div class="convo-item active"><div class="convo-dot" style="background:#818cf8"></div>Summarize emails</div>
+          <div class="convo-item"><div class="convo-dot" style="opacity:0.3;background:#818cf8"></div>Calendar check</div>
+          <div class="convo-item"><div class="convo-dot" style="opacity:0.3;background:#818cf8"></div>GitHub PRs</div>
+          <div class="divider"></div>
+          <div class="section-label">Connected Tools</div>
+          <div class="tool-item"><div class="tool-dot green"></div>Gmail</div>
+          <div class="tool-item"><div class="tool-dot gray"></div>Slack</div>
+          <div class="tool-item"><div class="tool-dot gray"></div>GitHub</div>
+          <div class="tool-item"><div class="tool-dot gray"></div>JIRA</div>
+        </div>
+        <div class="chat">
+          <div class="chat-header" style="background:#0f1629;border-bottom-color:#1e2d4a">
+            <div class="chat-title">ByteOps AI</div>
+            <div class="chat-sub">Your AI productivity assistant</div>
+          </div>
+          <div class="messages">
+            <div class="msg">
+              <div class="msg-avatar ai" style="background:linear-gradient(135deg,#6366f1,#818cf8)">✦</div>
+              <div class="bubble ai" style="background:linear-gradient(135deg,#6366f1,#818cf8)">
+                Hello! I'm your ByteOps AI assistant. I can help with Gmail, Calendar, and more.
+                <div class="suggestions" style="margin-top:8px">
+                  <span class="suggestion-chip" style="background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.15);color:rgba(255,255,255,0.8)">Summarize emails</span>
+                  <span class="suggestion-chip" style="background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.15);color:rgba(255,255,255,0.8)">What's on my calendar?</span>
+                </div>
+              </div>
+            </div>
+            <div class="msg user">
+              <div class="msg-avatar user" style="background:linear-gradient(135deg,#6366f1,#818cf8)">R</div>
+              <div class="bubble user" style="background:#1a2540;color:#e2e8f0">Summarize my unread emails from today</div>
+            </div>
+            <div class="msg">
+              <div class="msg-avatar ai" style="background:linear-gradient(135deg,#6366f1,#818cf8)">✦</div>
+              <div class="bubble ai" style="background:linear-gradient(135deg,#6366f1,#818cf8)">
+                <div class="tool-call" style="background:rgba(255,255,255,0.15)"><div class="tool-call-dot"></div>Gmail — fetching unread…</div>
+                <br>You have <strong>4 unread emails</strong>. Highest priority: Q3 review meeting from your manager, needs reply by EOD.
+              </div>
+            </div>
+          </div>
+          <div class="input-bar" style="background:#0f1629;border-top-color:#1e2d4a">
+            <div class="input-field" style="background:#0d1525;border-color:#1e2d4a;color:#64748b">Type your message...</div>
+            <div class="action-btn">📎</div>
+            <div class="action-btn">🎤</div>
+            <div class="send-btn" style="background:linear-gradient(135deg,#6366f1,#818cf8);box-shadow:0 0 12px rgba(129,140,248,0.35)">➤</div>
+          </div>
+        </div>
+        <div class="context-panel" style="background:#0f1629;border-left-color:#1e2d4a">
+          <div class="ctx-header" style="border-bottom-color:#1e2d4a">
+            <div class="ctx-title">Activity</div>
+            <div class="ctx-sub">Your workspace overview</div>
+          </div>
+          <div class="tabs-row">
+            <div class="ctx-tab">Flows</div>
+            <div class="ctx-tab active" style="background:rgba(129,140,248,0.15);color:#e2e8f0">Alerts</div>
+            <div class="ctx-tab">Tasks</div>
+          </div>
+          <div class="notif-list">
+            <div class="notif-card" style="background:#0d1525;border-color:#1e2d4a">
+              <div class="notif-top">
+                <div class="notif-icon" style="background:rgba(129,140,248,0.15)">📧</div>
+                <span class="notif-badge" style="background:rgba(239,68,68,0.2);color:#f87171">urgent</span>
+              </div>
+              <div class="notif-title">Q3 Review — reply needed by EOD</div>
+              <div class="notif-meta">📧 Gmail · 12m ago</div>
+            </div>
+            <div class="notif-card" style="background:#0d1525;border-color:#1e2d4a">
+              <div class="notif-top">
+                <div class="notif-icon" style="background:rgba(129,140,248,0.15)">📅</div>
+                <span class="notif-badge" style="background:rgba(251,191,36,0.15);color:#fbbf24">medium</span>
+              </div>
+              <div class="notif-title">Team standup in 30 minutes</div>
+              <div class="notif-meta">📅 Calendar · 5m ago</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="desc-strip">
+      <h3>B — Modern Dark-First</h3>
+      <p>Deep navy/midnight backgrounds, indigo-violet accent palette with subtle glows. Every interactive element has a sense of depth. This is the AI-native aesthetic — like Cursor, Vercel dashboard, or Raycast.</p>
+      <div class="tags">
+        <span class="tag">Indigo/Violet accents</span>
+        <span class="tag">Deep dark backgrounds</span>
+        <span class="tag">Subtle glow effects</span>
+        <span class="tag">Dark-first design</span>
+        <span class="tag">Inspired by: Cursor, Vercel, Raycast</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ DIRECTION C ═══════════════ -->
+  <div class="direction dir-c" id="dir-c">
+    <div class="dashboard">
+      <div class="topbar" style="background:#fff;border-bottom:1px solid #ebebeb">
+        <div class="topbar-brand">
+          <div class="brand-icon" style="background:#111111">✦</div>
+          <div>
+            <div class="brand-name" style="color:#111">ByteOps</div>
+            <div class="brand-tagline" style="color:#999">AI Work Assistant</div>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <div class="icon-btn" style="background:transparent;color:#999">☀</div>
+          <div class="icon-btn" style="background:transparent;color:#999">⚙</div>
+          <div class="avatar" style="background:#111"></div>
+        </div>
+      </div>
+      <div class="body">
+        <div class="sidebar" style="background:#fafafa;border-right:1px solid #ebebeb">
+          <div class="new-chat-btn" style="background:#111;color:#fff">+ New Chat</div>
+          <div class="section-label" style="color:#999">Chat History</div>
+          <div class="convo-item active" style="background:#f0f0f0;color:#111"><div class="convo-dot" style="background:#111"></div>Summarize emails</div>
+          <div class="convo-item" style="color:#999"><div class="convo-dot" style="background:#ccc"></div>Calendar check</div>
+          <div class="convo-item" style="color:#999"><div class="convo-dot" style="background:#ccc"></div>GitHub PRs</div>
+          <div class="divider" style="background:#ebebeb"></div>
+          <div class="section-label" style="color:#999">Connected Tools</div>
+          <div class="tool-item" style="color:#111"><div class="tool-dot green"></div>Gmail</div>
+          <div class="tool-item" style="color:#999"><div class="tool-dot gray"></div>Slack</div>
+          <div class="tool-item" style="color:#999"><div class="tool-dot gray"></div>GitHub</div>
+          <div class="tool-item" style="color:#999"><div class="tool-dot gray"></div>JIRA</div>
+        </div>
+        <div class="chat" style="background:#fff">
+          <div class="chat-header" style="background:#fff;border-bottom:1px solid #ebebeb">
+            <div class="chat-title" style="color:#111">ByteOps AI</div>
+            <div class="chat-sub" style="color:#999">Your AI productivity assistant</div>
+          </div>
+          <div class="messages">
+            <div class="msg">
+              <div class="msg-avatar ai" style="background:#111">✦</div>
+              <div class="bubble ai" style="background:#f0f0f0;color:#111">
+                Hello! I'm your ByteOps AI assistant. I can help with Gmail, Calendar, and more.
+                <div class="suggestions" style="margin-top:8px">
+                  <span class="suggestion-chip" style="background:#fff;border-color:#e0e0e0;color:#555">Summarize emails</span>
+                  <span class="suggestion-chip" style="background:#fff;border-color:#e0e0e0;color:#555">What's on my calendar?</span>
+                </div>
+              </div>
+            </div>
+            <div class="msg user">
+              <div class="msg-avatar user" style="background:#111">R</div>
+              <div class="bubble user" style="background:#111;color:#fff">Summarize my unread emails from today</div>
+            </div>
+            <div class="msg">
+              <div class="msg-avatar ai" style="background:#111">✦</div>
+              <div class="bubble ai" style="background:#f0f0f0;color:#111">
+                <div class="tool-call" style="background:rgba(0,0,0,0.07);color:#555"><div class="tool-call-dot"></div>Gmail — fetching unread…</div>
+                <br>You have <strong>4 unread emails</strong>. Highest priority: Q3 review meeting, reply needed by EOD.
+              </div>
+            </div>
+          </div>
+          <div class="input-bar" style="background:#fff;border-top:1px solid #ebebeb">
+            <div class="input-field" style="background:#f5f5f5;border-color:#e0e0e0;color:#999">Type your message...</div>
+            <div class="action-btn" style="color:#ccc">📎</div>
+            <div class="action-btn" style="color:#ccc">🎤</div>
+            <div class="send-btn" style="background:#111">➤</div>
+          </div>
+        </div>
+        <div class="context-panel" style="background:#fafafa;border-left:1px solid #ebebeb">
+          <div class="ctx-header" style="border-bottom:1px solid #ebebeb">
+            <div class="ctx-title" style="color:#111">Activity</div>
+            <div class="ctx-sub" style="color:#999">Your workspace overview</div>
+          </div>
+          <div class="tabs-row">
+            <div class="ctx-tab" style="color:#999">Flows</div>
+            <div class="ctx-tab active" style="background:#f0f0f0;color:#111">Alerts</div>
+            <div class="ctx-tab" style="color:#999">Tasks</div>
+          </div>
+          <div class="notif-list">
+            <div class="notif-card" style="background:#fff;border-color:#ebebeb">
+              <div class="notif-top">
+                <div class="notif-icon" style="background:#f5f5f5">📧</div>
+                <span class="notif-badge" style="background:#fee2e2;color:#ef4444">urgent</span>
+              </div>
+              <div class="notif-title" style="color:#111">Q3 Review — reply needed by EOD</div>
+              <div class="notif-meta" style="color:#999">📧 Gmail · 12m ago</div>
+            </div>
+            <div class="notif-card" style="background:#fff;border-color:#ebebeb">
+              <div class="notif-top">
+                <div class="notif-icon" style="background:#f5f5f5">📅</div>
+                <span class="notif-badge" style="background:#fef3c7;color:#d97706">medium</span>
+              </div>
+              <div class="notif-title" style="color:#111">Team standup in 30 minutes</div>
+              <div class="notif-meta" style="color:#999">📅 Calendar · 5m ago</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="desc-strip">
+      <h3>C — Clean & Minimal</h3>
+      <p>Near-monochrome palette — near-white backgrounds, near-black text and accents. Maximum whitespace, no decorative elements. Content breathes. The UI disappears and the work takes centre stage.</p>
+      <div class="tags">
+        <span class="tag">Near-monochrome</span>
+        <span class="tag">Maximum whitespace</span>
+        <span class="tag">Content-first</span>
+        <span class="tag">Light + optional dark</span>
+        <span class="tag">Inspired by: Claude.ai, ChatGPT, Arc</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  function show(id, el) {
+    document.querySelectorAll('.direction').forEach(d => d.classList.remove('visible'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('dir-' + id).classList.add('visible');
+    el.classList.add('active');
+
+    // record selection for the harness
+    if (window.recordSelection) window.recordSelection(id, el.textContent.trim());
+    const ev = new CustomEvent('brainstorm-select', { detail: { choice: id, text: el.textContent.trim() } });
+    document.dispatchEvent(ev);
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ByteOps × ByteCorp — Blue Gradient Theme</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  background: #0a0a0a;
+  color: #fff;
+  padding: 0;
+}
+
+.page { padding: 32px 36px; max-width: 1520px; margin: 0 auto; }
+.page-header { margin-bottom: 20px; }
+.page-header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.4px; }
+.page-header p  { font-size: 13px; color: #666; margin-top: 4px; }
+
+/* Swatch row */
+.swatches { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0 22px; }
+.sw { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.sw-dot { width: 30px; height: 30px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); }
+.sw-lbl { font-size: 9px; color: #555; text-align: center; line-height: 1.4; }
+
+/* Mode toggle */
+.mode-toggle { display: flex; gap: 8px; margin-bottom: 22px; }
+.mode-btn {
+  padding: 8px 20px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  cursor: pointer; border: 1px solid #262626; background: #141414; color: #555;
+  transition: all 0.15s; letter-spacing: -0.2px;
+}
+.mode-btn:hover { color: #aaa; border-color: #333; }
+.mode-btn.active { background: #fff; color: #000; border-color: #fff; }
+
+.panels-wrap { display: flex; gap: 26px; }
+.panel-col { flex: 1; min-width: 0; }
+.panel-lbl { font-size: 10.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #444; margin-bottom: 10px; }
+
+/* ─────────────────────────────────────────────
+   DASHBOARD SHELL
+───────────────────────────────────────────── */
+.dashboard {
+  border-radius: 14px; overflow: hidden;
+  height: 600px; display: flex; flex-direction: column;
+  font-size: 12px;
+  border: 1px solid var(--frame-border);
+  background: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+}
+
+/* ─────────────────────────────────────────────
+   DARK THEME
+   BG: pure black (ByteCorp)
+   Accent: blue gradient (user request)
+───────────────────────────────────────────── */
+.dark {
+  /* Base */
+  --bg:            #000000;
+  --surface:       #0d0d0d;
+  --surface2:      #111111;
+  --frame-border:  rgba(255,255,255,0.11);
+  --border:        rgba(255,255,255,0.08);
+  --border-soft:   rgba(255,255,255,0.05);
+  --text:          #ffffff;
+  --text-sub:      rgba(255,255,255,0.5);
+  --muted:         #8A8F98;
+
+  /* Blue gradient accent — "ByteOps blue with gradient" */
+  --accent-start:  #2563eb;
+  --accent-end:    #60a5fa;
+  --accent-grad:   linear-gradient(135deg, #2563eb, #60a5fa);
+  --accent-solid:  #3b82f6;
+  --accent-dim:    rgba(59,130,246,0.12);
+  --accent-glow:   0 0 18px rgba(59,130,246,0.28);
+  --pill:          rgba(59,130,246,0.12);
+  --pill-text:     #60a5fa;
+
+  /* ByteCorp brand mark gradient (pink→purple from their site) */
+  --brand-grad:    linear-gradient(135deg, #B73764, #7F3E9D);
+
+  /* Chat */
+  --chat-bg:       #050505;
+  --ai-bubble:     linear-gradient(135deg, #1d4ed8, #3b82f6);
+  --ai-text:       #ffffff;
+  --user-bubble:   rgba(255,255,255,0.06);
+  --user-text:     rgba(255,255,255,0.88);
+
+  /* Input */
+  --input-bg:      rgba(255,255,255,0.04);
+
+  /* Chips */
+  --chip-bg:       rgba(255,255,255,0.05);
+  --chip-border:   rgba(255,255,255,0.09);
+  --chip-text:     rgba(255,255,255,0.5);
+
+  /* Tool call */
+  --tc-bg:         rgba(255,255,255,0.12);
+  --tc-text:       rgba(255,255,255,0.75);
+
+  /* Buttons */
+  --btn-bg:        linear-gradient(135deg, #2563eb, #60a5fa);
+  --btn-text:      #ffffff;
+  --btn-send-bg:   linear-gradient(135deg, #2563eb, #3b82f6);
+
+  /* Sync */
+  --sync-bg:       rgba(147,227,174,0.07);
+  --sync-border:   rgba(147,227,174,0.18);
+  --sync-text:     #93E3AE;
+  --online:        #93E3AE;
+  --offline-dot:   rgba(255,255,255,0.12);
+
+  /* Badges */
+  --badge-u-bg:    rgba(220,53,20,0.18);  --badge-u-txt: #FF7054;
+  --badge-m-bg:    rgba(245,158,11,0.14); --badge-m-txt: #FBBF24;
+  --badge-l-bg:    rgba(59,130,246,0.14); --badge-l-txt: #60a5fa;
+
+  /* Card shadow */
+  --card-shadow: 0 0 0 1px rgba(255,255,255,0.03) inset, 0 6px 20px -8px rgba(0,0,0,0.55);
+}
+
+/* ─────────────────────────────────────────────
+   LIGHT THEME
+   BG: soft white
+   Accent: blue gradient (deeper for contrast)
+───────────────────────────────────────────── */
+.light {
+  /* Base */
+  --bg:            #F5F6F8;
+  --surface:       #FFFFFF;
+  --surface2:      #F0F1F4;
+  --frame-border:  #D8D9E0;
+  --border:        #E3E4EA;
+  --border-soft:   #EBEBF0;
+  --text:          #08090A;
+  --text-sub:      #6B6C76;
+  --muted:         #8A8F98;
+
+  /* Blue gradient accent — deeper for readability on white */
+  --accent-start:  #1d4ed8;
+  --accent-end:    #3b82f6;
+  --accent-grad:   linear-gradient(135deg, #1d4ed8, #3b82f6);
+  --accent-solid:  #2563eb;
+  --accent-dim:    rgba(37,99,235,0.08);
+  --accent-glow:   0 0 14px rgba(37,99,235,0.2);
+  --pill:          rgba(37,99,235,0.08);
+  --pill-text:     #2563eb;
+
+  /* ByteCorp brand mark stays the same gradient */
+  --brand-grad:    linear-gradient(135deg, #B73764, #7F3E9D);
+
+  /* Chat */
+  --chat-bg:       #F8F9FB;
+  --ai-bubble:     linear-gradient(135deg, #1d4ed8, #3b82f6);
+  --ai-text:       #ffffff;
+  --user-bubble:   #EEF2FF;
+  --user-text:     #08090A;
+
+  /* Input */
+  --input-bg:      #F0F1F5;
+
+  /* Chips */
+  --chip-bg:       #FFFFFF;
+  --chip-border:   #DDE1EC;
+  --chip-text:     #6B6C76;
+
+  /* Tool call */
+  --tc-bg:         rgba(37,99,235,0.08);
+  --tc-text:       #2563eb;
+
+  /* Buttons */
+  --btn-bg:        linear-gradient(135deg, #1d4ed8, #3b82f6);
+  --btn-text:      #ffffff;
+  --btn-send-bg:   linear-gradient(135deg, #1d4ed8, #2563eb);
+
+  /* Sync */
+  --sync-bg:       rgba(22,163,74,0.06);
+  --sync-border:   rgba(22,163,74,0.16);
+  --sync-text:     #16A34A;
+  --online:        #16A34A;
+  --offline-dot:   #D1D5DB;
+
+  /* Badges */
+  --badge-u-bg:    rgba(220,53,20,0.09);  --badge-u-txt: #DC3514;
+  --badge-m-bg:    rgba(217,119,6,0.09);  --badge-m-txt: #B45309;
+  --badge-l-bg:    rgba(37,99,235,0.09);  --badge-l-txt: #2563eb;
+
+  /* Card shadow */
+  --card-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 4px 14px rgba(0,0,0,0.04);
+}
+
+/* ─────────────────────────────────────────────
+   COMPONENT STYLES
+───────────────────────────────────────────── */
+
+/* Topbar */
+.topbar {
+  height: 52px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  backdrop-filter: blur(20px);
+}
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-mark {
+  width: 30px; height: 30px; border-radius: 7px;
+  background: var(--brand-grad);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 800; color: #fff; flex-shrink: 0;
+  letter-spacing: -1px;
+}
+.brand-name { font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -0.4px; }
+.brand-sub  { font-size: 10px; color: var(--muted); }
+.topbar-right { display: flex; align-items: center; gap: 6px; }
+.icon-btn {
+  width: 30px; height: 30px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; color: var(--muted); cursor: pointer;
+  background: var(--surface2); border: 1px solid var(--border-soft);
+}
+.avatar {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--accent-grad); flex-shrink: 0;
+}
+
+/* Body */
+.body { display: flex; flex: 1; overflow: hidden; }
+
+/* Sidebar */
+.sidebar {
+  width: 188px; flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  padding: 10px 8px; overflow: hidden;
+}
+.new-chat-btn {
+  width: 100%; padding: 8px 12px; border-radius: 7px;
+  background: var(--btn-bg); color: var(--btn-text);
+  font-size: 12px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  margin-bottom: 12px; cursor: pointer; letter-spacing: -0.2px;
+  border: none; box-shadow: var(--accent-glow);
+}
+.sec-lbl {
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--muted);
+  padding: 0 5px; margin-bottom: 4px;
+}
+.convo {
+  display: flex; align-items: center; gap: 7px;
+  padding: 6px 7px; border-radius: 6px;
+  font-size: 11.5px; cursor: pointer; margin-bottom: 1px;
+  color: var(--text-sub); transition: background 0.12s;
+}
+.convo:hover { background: var(--accent-dim); }
+.convo.active { background: var(--pill); color: var(--pill-text); font-weight: 500; }
+.cdot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent-solid); opacity: 0.5; flex-shrink: 0; }
+.convo.active .cdot { opacity: 1; }
+.divider { height: 1px; background: var(--border); margin: 8px 0; }
+
+.tool-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 7px; border-radius: 6px; cursor: pointer;
+  color: var(--text-sub); font-size: 11.5px; margin-bottom: 1px;
+  transition: background 0.12s;
+}
+.tool-row:hover { background: var(--accent-dim); color: var(--text); }
+.t-icon { width: 20px; height: 20px; border-radius: 5px; overflow: hidden; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.t-icon img { width: 16px; height: 16px; object-fit: contain; display: block; }
+.sdot { width: 6px; height: 6px; border-radius: 50%; margin-left: auto; flex-shrink: 0; }
+.sdot.on  { background: var(--online); }
+.sdot.off { background: var(--offline-dot); }
+
+/* Chat */
+.chat { flex: 1; display: flex; flex-direction: column; background: var(--chat-bg); overflow: hidden; }
+.chat-hdr {
+  padding: 12px 16px 10px; flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.ct { font-weight: 600; font-size: 13px; color: var(--text); letter-spacing: -0.3px; }
+.cs { font-size: 10px; color: var(--muted); margin-top: 1px; }
+
+.messages { flex: 1; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+.msg { display: flex; gap: 8px; }
+.msg.user { flex-direction: row-reverse; }
+
+.av {
+  width: 27px; height: 27px; border-radius: 7px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 800; margin-top: 1px;
+}
+.av.ai   { background: var(--ai-bubble); color: #fff; }
+.av.user { background: var(--accent-grad); color: #fff; }
+
+.bubble {
+  max-width: 70%; padding: 9px 13px; border-radius: 11px;
+  font-size: 11.5px; line-height: 1.6;
+}
+.bubble.ai {
+  background: var(--ai-bubble); color: var(--ai-text);
+  box-shadow: var(--card-shadow);
+}
+.bubble.user {
+  background: var(--user-bubble); color: var(--user-text);
+  border: 1px solid var(--border-soft);
+}
+
+.tc-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--tc-bg); color: var(--tc-text);
+  border-radius: 5px; padding: 3px 8px; font-size: 10px; margin-top: 5px;
+}
+.tc-pill img { width: 11px; height: 11px; border-radius: 2px; }
+.tc-green { width: 5px; height: 5px; border-radius: 50%; background: var(--online); flex-shrink: 0; }
+
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.chip {
+  padding: 4px 10px; border-radius: 20px; font-size: 10.5px;
+  border: 1px solid var(--chip-border); background: var(--chip-bg); color: var(--chip-text); cursor: pointer;
+}
+
+.typing { display: flex; gap: 3px; align-items: center; padding: 1px 0; }
+.typing span {
+  width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,0.55);
+  animation: blink 1.2s infinite; flex-shrink: 0;
+}
+.typing span:nth-child(2) { animation-delay: 0.2s; }
+.typing span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes blink { 0%,80%,100%{opacity:.25} 40%{opacity:1} }
+
+.input-row {
+  padding: 10px 14px; flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  display: flex; align-items: center; gap: 7px;
+}
+.input-field {
+  flex: 1; background: var(--input-bg);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 12px; color: var(--muted);
+  font-size: 11.5px; font-family: inherit;
+}
+.act-btn { width: 30px; height: 30px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 13px; color: var(--muted); cursor: pointer; }
+.send-btn {
+  width: 30px; height: 30px; border-radius: 7px; display: flex;
+  align-items: center; justify-content: center;
+  background: var(--btn-send-bg); color: #fff;
+  font-size: 13px; cursor: pointer; flex-shrink: 0;
+  box-shadow: var(--accent-glow);
+}
+
+/* Context panel */
+.ctx {
+  width: 210px; flex-shrink: 0;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.ctx-hdr { padding: 12px 13px 10px; border-bottom: 1px solid var(--border); }
+.ctx-t  { font-weight: 600; font-size: 13px; color: var(--text); letter-spacing: -0.3px; }
+.ctx-s  { font-size: 10px; color: var(--muted); margin-top: 1px; }
+.ctx-tabs { display: flex; padding: 7px 7px 4px; gap: 3px; }
+.ctx-tab {
+  flex: 1; padding: 5px; border-radius: 6px;
+  font-size: 9.5px; font-weight: 600; text-align: center;
+  color: var(--muted); cursor: pointer;
+}
+.ctx-tab.active { background: var(--pill); color: var(--pill-text); }
+
+.notif-list { padding: 6px 8px; display: flex; flex-direction: column; gap: 7px; overflow: hidden; }
+
+.sync-strip {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 9px; border-radius: 7px; font-size: 10px;
+  background: var(--sync-bg); border: 1px solid var(--sync-border); color: var(--sync-text);
+}
+.snd { width: 5px; height: 5px; border-radius: 50%; background: var(--online); }
+
+.notif-card {
+  background: var(--surface2); border: 1px solid var(--border-soft);
+  border-radius: 9px; padding: 9px 10px; box-shadow: var(--card-shadow);
+}
+.notif-top { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+.n-ico {
+  width: 24px; height: 24px; border-radius: 6px;
+  background: var(--accent-dim);
+  display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;
+}
+.n-ico img { width: 14px; height: 14px; object-fit: contain; }
+.badge {
+  padding: 2px 7px; border-radius: 20px;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase;
+}
+.badge.u { background: var(--badge-u-bg); color: var(--badge-u-txt); }
+.badge.m { background: var(--badge-m-bg); color: var(--badge-m-txt); }
+.badge.l { background: var(--badge-l-bg); color: var(--badge-l-txt); }
+.n-title { font-size: 11px; font-weight: 500; color: var(--text); line-height: 1.4; margin-bottom: 4px; }
+.n-meta  { font-size: 10px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+.n-meta img { width: 10px; height: 10px; border-radius: 2px; }
+
+/* Ask AI button on notif card */
+.ask-ai {
+  margin-top: 7px; width: 100%; padding: 5px 8px;
+  border-radius: 6px; font-size: 10px; font-weight: 600;
+  background: var(--accent-dim); color: var(--pill-text);
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  cursor: pointer; border: 1px solid transparent;
+  transition: border-color 0.15s;
+}
+
+/* Description */
+.desc {
+  margin-top: 14px; padding: 16px 18px;
+  background: #131313; border-radius: 10px; border: 1px solid #1f1f1f;
+}
+.desc h3 { font-size: 13px; font-weight: 700; margin-bottom: 6px; letter-spacing: -0.3px; }
+.desc p  { font-size: 12px; color: #777; line-height: 1.65; margin-bottom: 12px; }
+.tokens  { display: flex; gap: 7px; flex-wrap: wrap; }
+.tok {
+  display: flex; align-items: center; gap: 6px;
+  background: #1c1c1c; border: 1px solid #282828;
+  border-radius: 7px; padding: 5px 10px; font-size: 10.5px; color: #999;
+}
+.tok-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+
+/* Layout visibility */
+.dark-only  .panel-col.light-col { display: none; }
+.light-only .panel-col.dark-col  { display: none; }
+</style>
+</head>
+<body>
+<div class="page" id="app">
+
+  <div class="page-header">
+    <h1>ByteOps × ByteCorp — Blue Gradient Theme</h1>
+    <p>ByteCorp brand DNA (black base · Geist · pink→purple mark) + ByteOps signature blue, now with gradient</p>
+  </div>
+
+  <!-- Brand swatches -->
+  <div class="swatches">
+    <div class="sw">
+      <div class="sw-dot" style="background:linear-gradient(135deg,#1d4ed8,#60a5fa)"></div>
+      <div class="sw-lbl">Blue Gradient<br>#1d4ed8→#60a5fa</div>
+    </div>
+    <div class="sw">
+      <div class="sw-dot" style="background:linear-gradient(135deg,#B73764,#7F3E9D)"></div>
+      <div class="sw-lbl">Brand Mark<br>ByteCorp Hero</div>
+    </div>
+    <div class="sw">
+      <div class="sw-dot" style="background:#000;border-color:#333"></div>
+      <div class="sw-lbl">Dark BG<br>#000000</div>
+    </div>
+    <div class="sw">
+      <div class="sw-dot" style="background:#F5F6F8;border-color:#333"></div>
+      <div class="sw-lbl">Light BG<br>#F5F6F8</div>
+    </div>
+    <div class="sw">
+      <div class="sw-dot" style="background:#8A8F98"></div>
+      <div class="sw-lbl">Muted<br>#8A8F98</div>
+    </div>
+    <div class="sw">
+      <div class="sw-dot" style="background:#93E3AE"></div>
+      <div class="sw-lbl">Online (dark)<br>#93E3AE</div>
+    </div>
+    <div class="sw">
+      <div class="sw-dot" style="background:#16A34A"></div>
+      <div class="sw-lbl">Online (light)<br>#16A34A</div>
+    </div>
+    <div class="sw">
+      <div class="sw-dot" style="background:#DC3514"></div>
+      <div class="sw-lbl">Urgent<br>#DC3514</div>
+    </div>
+  </div>
+
+  <div class="mode-toggle">
+    <div class="mode-btn active" onclick="setMode('both',this)">Side by Side</div>
+    <div class="mode-btn" onclick="setMode('dark-only',this)">🌑 Dark Only</div>
+    <div class="mode-btn" onclick="setMode('light-only',this)">☀️ Light Only</div>
+  </div>
+
+  <div class="panels-wrap">
+
+    <!-- ══════════ DARK ══════════ -->
+    <div class="panel-col dark-col">
+      <div class="panel-lbl">🌑 Dark Mode — Pure black · Blue gradient accent</div>
+      <div class="dashboard dark">
+
+        <div class="topbar">
+          <div class="brand">
+            <div class="brand-mark">b</div>
+            <div><div class="brand-name">ByteOps</div><div class="brand-sub">AI Work Assistant · ByteCorp</div></div>
+          </div>
+          <div class="topbar-right">
+            <div class="icon-btn">☀</div>
+            <div class="icon-btn">⚙</div>
+            <div class="avatar"></div>
+          </div>
+        </div>
+
+        <div class="body">
+          <div class="sidebar">
+            <div class="new-chat-btn">＋ New Chat</div>
+            <div class="sec-lbl">Chats</div>
+            <div class="convo active"><div class="cdot"></div>Summarize emails</div>
+            <div class="convo"><div class="cdot" style="opacity:.2"></div>Calendar review</div>
+            <div class="convo"><div class="cdot" style="opacity:.2"></div>GitHub PRs</div>
+            <div class="divider"></div>
+            <div class="sec-lbl">Tools</div>
+            <div class="tool-row"><div class="t-icon" data-tool="gmail"></div><span>Gmail</span><div class="sdot on"></div></div>
+            <div class="tool-row"><div class="t-icon" data-tool="calendar"></div><span>Calendar</span><div class="sdot off"></div></div>
+            <div class="tool-row"><div class="t-icon" data-tool="slack"></div><span>Slack</span><div class="sdot off"></div></div>
+            <div class="tool-row"><div class="t-icon" data-tool="github"></div><span>GitHub</span><div class="sdot off"></div></div>
+            <div class="tool-row"><div class="t-icon" data-tool="jira"></div><span>JIRA</span><div class="sdot off"></div></div>
+            <div class="tool-row"><div class="t-icon" data-tool="trello"></div><span>Trello</span><div class="sdot off"></div></div>
+            <div class="tool-row"><div class="t-icon" data-tool="dropbox"></div><span>Dropbox</span><div class="sdot off"></div></div>
+          </div>
+
+          <div class="chat">
+            <div class="chat-hdr">
+              <div><div class="ct">ByteOps AI</div><div class="cs">Powered by ByteCorp · AI-enabled workspace</div></div>
+            </div>
+            <div class="messages">
+              <div class="msg">
+                <div class="av ai">b</div>
+                <div class="bubble ai">
+                  Hello! I can help with Gmail, Calendar, GitHub and more. What would you like to do?
+                  <div class="chips">
+                    <span class="chip">Summarize emails</span>
+                    <span class="chip">What's on my calendar?</span>
+                    <span class="chip">Show open PRs</span>
+                  </div>
+                </div>
+              </div>
+              <div class="msg user">
+                <div class="av user">R</div>
+                <div class="bubble user">Summarize my unread emails from today</div>
+              </div>
+              <div class="msg">
+                <div class="av ai">b</div>
+                <div class="bubble ai">
+                  <div class="tc-pill">
+                    <div class="tc-green"></div>
+                    <span data-ti="gmail"></span>
+                    Reading Gmail inbox…
+                  </div>
+                  <br>You have <strong>4 unread emails</strong>. Top priority: your manager's Q3 Review — reply needed by EOD.
+                </div>
+              </div>
+              <div class="msg">
+                <div class="av ai">b</div>
+                <div class="bubble ai"><div class="typing"><span></span><span></span><span></span></div></div>
+              </div>
+            </div>
+            <div class="input-row">
+              <div class="input-field">Ask anything about your tools…</div>
+              <div class="act-btn">📎</div>
+              <div class="act-btn">🎤</div>
+              <div class="send-btn">↑</div>
+            </div>
+          </div>
+
+          <div class="ctx">
+            <div class="ctx-hdr"><div class="ctx-t">Activity</div><div class="ctx-s">Workspace overview</div></div>
+            <div class="ctx-tabs">
+              <div class="ctx-tab">Flows</div>
+              <div class="ctx-tab active">Alerts</div>
+              <div class="ctx-tab">Tasks</div>
+            </div>
+            <div class="notif-list">
+              <div class="sync-strip"><div class="snd"></div>Synced just now · next 14 min</div>
+              <div class="notif-card">
+                <div class="notif-top">
+                  <div class="n-ico" data-tn="gmail"></div>
+                  <span class="badge u">Urgent</span>
+                </div>
+                <div class="n-title">Q3 Review — reply needed by EOD</div>
+                <div class="n-meta"><span data-tm="gmail"></span>Gmail · 12m ago</div>
+                <div class="ask-ai">✦ Ask AI about this</div>
+              </div>
+              <div class="notif-card">
+                <div class="notif-top">
+                  <div class="n-ico" data-tn="calendar"></div>
+                  <span class="badge m">Medium</span>
+                </div>
+                <div class="n-title">Team standup in 30 minutes</div>
+                <div class="n-meta"><span data-tm="calendar"></span>Calendar · 5m ago</div>
+              </div>
+              <div class="notif-card">
+                <div class="notif-top">
+                  <div class="n-ico" data-tn="github"></div>
+                  <span class="badge l">Low</span>
+                </div>
+                <div class="n-title">PR #47 — 2 review comments</div>
+                <div class="n-meta"><span data-tm="github"></span>GitHub · 1h ago</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="desc">
+        <h3>🌑 Dark Mode</h3>
+        <p>Pure black ByteCorp base. The blue gradient (<strong style="background:linear-gradient(135deg,#2563eb,#60a5fa);-webkit-background-clip:text;-webkit-text-fill-color:transparent">#2563eb → #60a5fa</strong>) replaces the flat blue — used on buttons, the send key, AI bubbles, active states, and the user avatar. The brand mark keeps ByteCorp's pink→purple hero gradient for brand identity.</p>
+        <div class="tokens">
+          <div class="tok"><div class="tok-dot" style="background:#000;border:1px solid #333"></div>BG #000000</div>
+          <div class="tok"><div class="tok-dot" style="background:linear-gradient(135deg,#2563eb,#60a5fa)"></div>Blue grad</div>
+          <div class="tok"><div class="tok-dot" style="background:linear-gradient(135deg,#B73764,#7F3E9D)"></div>Brand mark</div>
+          <div class="tok"><div class="tok-dot" style="background:#8A8F98"></div>Muted</div>
+          <div class="tok"><div class="tok-dot" style="background:#93E3AE"></div>Online</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ LIGHT ══════════ -->
+    <div class="panel-col light-col">
+      <div class="panel-lbl">☀️ Light Mode — Warm white · Blue gradient accent</div>
+      <div class="dashboard light">
+
+        <div class="topbar">
+          <div class="brand">
+            <div class="brand-mark">b</div>
+            <div><div class="brand-name">ByteOps</div><div class="brand-sub">AI Work Assistant · ByteCorp</div></div>
+          </div>
+          <div class="topbar-right">
+            <div class="icon-btn">🌙</div>
+            <div class="icon-btn">⚙</div>
+            <div class="avatar"></div>
+          </div>
+        </div>
+
+        <div class="body">
+          <div class="sidebar">
+            <div class="new-chat-btn">＋ New Chat</div>
+            <div class="sec-lbl">Chats</div>
+            <div class="convo active"><div class="cdot"></div>Summarize emails</div>
+            <div class="convo"><div class="cdot" style="opacity:.2"></div>Calendar review</div>
+            <div class="convo"><div class="cdot" style="opacity:.2"></div>GitHub PRs</div>
+            <div class="divider"></div>
+            <div class="sec-lbl">Tools</div>
+            <div class="tool-row"><div class="t-icon" data-tool="gmail"></div><span>Gmail</span><div class="sdot on"></div></div>
+            <div class="tool-row"><div class="t-icon" data-tool="calendar"></div><span>Calendar</span><div class="sdot off"></div></div>
+            <div class="tool-row"><div class="t-icon" data-tool="slack"></div><span>Slack</span><div class="sdot off"></div></div>
+            <div class="tool-row"><div class="t-icon" data-tool="github"></div><span>GitHub</span><div class="sdot off"></div></div>
+            <div class="tool-row"><div class="t-icon" data-tool="jira"></div><span>JIRA</span><div class="sdot off"></div></div>
+            <div class="tool-row"><div class="t-icon" data-tool="trello"></div><span>Trello</span><div class="sdot off"></div></div>
+            <div class="tool-row"><div class="t-icon" data-tool="dropbox"></div><span>Dropbox</span><div class="sdot off"></div></div>
+          </div>
+
+          <div class="chat">
+            <div class="chat-hdr">
+              <div><div class="ct">ByteOps AI</div><div class="cs">Powered by ByteCorp · AI-enabled workspace</div></div>
+            </div>
+            <div class="messages">
+              <div class="msg">
+                <div class="av ai">b</div>
+                <div class="bubble ai">
+                  Hello! I can help with Gmail, Calendar, GitHub and more. What would you like to do?
+                  <div class="chips">
+                    <span class="chip">Summarize emails</span>
+                    <span class="chip">What's on my calendar?</span>
+                    <span class="chip">Show open PRs</span>
+                  </div>
+                </div>
+              </div>
+              <div class="msg user">
+                <div class="av user">R</div>
+                <div class="bubble user">Summarize my unread emails from today</div>
+              </div>
+              <div class="msg">
+                <div class="av ai">b</div>
+                <div class="bubble ai">
+                  <div class="tc-pill">
+                    <div class="tc-green"></div>
+                    <span data-ti="gmail"></span>
+                    Reading Gmail inbox…
+                  </div>
+                  <br>You have <strong>4 unread emails</strong>. Top priority: your manager's Q3 Review — reply needed by EOD.
+                </div>
+              </div>
+              <div class="msg">
+                <div class="av ai">b</div>
+                <div class="bubble ai"><div class="typing"><span style="background:rgba(255,255,255,0.5)"></span><span style="background:rgba(255,255,255,0.5)"></span><span style="background:rgba(255,255,255,0.5)"></span></div></div>
+              </div>
+            </div>
+            <div class="input-row">
+              <div class="input-field">Ask anything about your tools…</div>
+              <div class="act-btn">📎</div>
+              <div class="act-btn">🎤</div>
+              <div class="send-btn">↑</div>
+            </div>
+          </div>
+
+          <div class="ctx">
+            <div class="ctx-hdr"><div class="ctx-t">Activity</div><div class="ctx-s">Workspace overview</div></div>
+            <div class="ctx-tabs">
+              <div class="ctx-tab">Flows</div>
+              <div class="ctx-tab active">Alerts</div>
+              <div class="ctx-tab">Tasks</div>
+            </div>
+            <div class="notif-list">
+              <div class="sync-strip"><div class="snd"></div>Synced just now · next 14 min</div>
+              <div class="notif-card">
+                <div class="notif-top">
+                  <div class="n-ico" data-tn="gmail"></div>
+                  <span class="badge u">Urgent</span>
+                </div>
+                <div class="n-title">Q3 Review — reply needed by EOD</div>
+                <div class="n-meta"><span data-tm="gmail"></span>Gmail · 12m ago</div>
+                <div class="ask-ai">✦ Ask AI about this</div>
+              </div>
+              <div class="notif-card">
+                <div class="notif-top">
+                  <div class="n-ico" data-tn="calendar"></div>
+                  <span class="badge m">Medium</span>
+                </div>
+                <div class="n-title">Team standup in 30 minutes</div>
+                <div class="n-meta"><span data-tm="calendar"></span>Calendar · 5m ago</div>
+              </div>
+              <div class="notif-card">
+                <div class="notif-top">
+                  <div class="n-ico" data-tn="github"></div>
+                  <span class="badge l">Low</span>
+                </div>
+                <div class="n-title">PR #47 — 2 review comments</div>
+                <div class="n-meta"><span data-tm="github"></span>GitHub · 1h ago</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="desc">
+        <h3>☀️ Light Mode</h3>
+        <p>Warm white base. Blue gradient deepened to <strong style="color:#1d4ed8">#1d4ed8</strong> → <strong style="color:#3b82f6">#3b82f6</strong> for proper contrast on white. Same gradient on AI bubbles, New Chat button, send arrow, and user avatar. Brand mark keeps the ByteCorp pink→purple identity.</p>
+        <div class="tokens">
+          <div class="tok"><div class="tok-dot" style="background:#F5F6F8;border:1px solid #ddd"></div>BG #F5F6F8</div>
+          <div class="tok"><div class="tok-dot" style="background:linear-gradient(135deg,#1d4ed8,#3b82f6)"></div>Blue grad</div>
+          <div class="tok"><div class="tok-dot" style="background:linear-gradient(135deg,#B73764,#7F3E9D)"></div>Brand mark</div>
+          <div class="tok"><div class="tok-dot" style="background:#8A8F98"></div>Muted</div>
+          <div class="tok"><div class="tok-dot" style="background:#16A34A"></div>Online</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- panels-wrap -->
+</div>
+
+<script>
+const ICONS = {
+  gmail:    'https://www.google.com/s2/favicons?domain=gmail.com&sz=64',
+  calendar: 'https://www.google.com/s2/favicons?domain=calendar.google.com&sz=64',
+  slack:    'https://www.google.com/s2/favicons?domain=slack.com&sz=64',
+  github:   'https://www.google.com/s2/favicons?domain=github.com&sz=64',
+  jira:     'https://www.google.com/s2/favicons?domain=jira.atlassian.com&sz=64',
+  trello:   'https://www.google.com/s2/favicons?domain=trello.com&sz=64',
+  dropbox:  'https://www.google.com/s2/favicons?domain=dropbox.com&sz=64',
+};
+
+document.querySelectorAll('[data-tool]').forEach(el => {
+  const t = el.getAttribute('data-tool');
+  el.innerHTML = `<img src="${ICONS[t]}" width="16" height="16">`;
+});
+document.querySelectorAll('[data-tn]').forEach(el => {
+  const t = el.getAttribute('data-tn');
+  el.innerHTML = `<img src="${ICONS[t]}" width="14" height="14">`;
+});
+document.querySelectorAll('[data-tm]').forEach(el => {
+  const t = el.getAttribute('data-tm');
+  el.innerHTML = `<img src="${ICONS[t]}" width="10" height="10"> `;
+});
+document.querySelectorAll('[data-ti]').forEach(el => {
+  const t = el.getAttribute('data-ti');
+  el.innerHTML = `<img src="${ICONS[t]}" width="11" height="11" style="border-radius:2px"> `;
+});
+
+function setMode(mode, btn) {
+  document.getElementById('app').className = 'page ' + mode;
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+</script>
+</body>
+</html>

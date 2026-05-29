@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ByteOps — Design Directions v2 (Real Icons)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: #0f0f0f; color: #fff; padding: 32px; }
+
+  h1 { font-size: 22px; font-weight: 600; margin-bottom: 6px; }
+  .subtitle { font-size: 14px; color: #888; margin-bottom: 24px; }
+
+  .tabs { display: flex; gap: 8px; margin-bottom: 24px; }
+  .tab {
+    padding: 10px 22px; border-radius: 10px; font-size: 14px; font-weight: 500;
+    cursor: pointer; border: 1px solid #2a2a2a; background: #1a1a1a; color: #888;
+    transition: all 0.2s;
+  }
+  .tab:hover { border-color: #444; color: #ccc; }
+  .tab.active { background: #fff; color: #000; border-color: #fff; }
+
+  .direction { display: none; }
+  .direction.visible { display: block; }
+
+  /* ────────────────────────────────────────
+     SHARED DASHBOARD SHELL
+     ──────────────────────────────────────── */
+  .dashboard {
+    border-radius: 16px; overflow: hidden;
+    border: 1px solid #2a2a2a;
+    height: 580px;
+    display: flex; flex-direction: column;
+    font-size: 12px;
+  }
+  .topbar {
+    height: 54px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--topbar-bg);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand-icon {
+    width: 34px; height: 34px; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; flex-shrink: 0;
+    background: var(--brand-grad);
+    color: #fff;
+  }
+  .brand-name { font-size: 15px; font-weight: 700; color: var(--text); }
+  .brand-sub { font-size: 10px; color: var(--muted); }
+  .topbar-right { display: flex; align-items: center; gap: 8px; }
+  .icon-btn {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: var(--pill); display: flex; align-items: center;
+    justify-content: center; font-size: 13px; color: var(--muted); cursor: pointer;
+  }
+  .avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--brand-grad); }
+
+  .body { display: flex; flex: 1; overflow: hidden; }
+
+  /* ────────────────────────────────────────
+     SIDEBAR
+     ──────────────────────────────────────── */
+  .sidebar {
+    width: 196px; flex-shrink: 0;
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    padding: 12px 8px;
+    overflow: hidden;
+  }
+  .new-chat {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    width: 100%; padding: 9px 12px; border-radius: 10px;
+    background: var(--brand-grad); color: #fff;
+    font-size: 12px; font-weight: 600; cursor: pointer; margin-bottom: 14px;
+  }
+  .sec-label {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.05em;
+    text-transform: uppercase; color: var(--muted);
+    padding: 0 6px; margin-bottom: 5px;
+  }
+  .convo {
+    display: flex; align-items: center; gap: 7px;
+    padding: 7px 8px; border-radius: 9px;
+    font-size: 11.5px; cursor: pointer; margin-bottom: 2px;
+    color: var(--muted);
+  }
+  .convo.active { background: var(--pill); color: var(--text); }
+  .convo-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+  .divider { height: 1px; background: var(--border); margin: 10px 0; }
+
+  /* Tool items with REAL icons */
+  .tool {
+    display: flex; align-items: center; gap: 9px;
+    padding: 7px 8px; border-radius: 9px; cursor: pointer;
+    color: var(--muted); font-size: 11.5px; margin-bottom: 2px;
+    transition: background 0.15s;
+  }
+  .tool:hover { background: var(--pill); }
+  .tool-icon-wrap {
+    width: 22px; height: 22px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden; flex-shrink: 0;
+  }
+  .tool-icon-wrap img { width: 18px; height: 18px; object-fit: contain; }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; margin-left: auto; flex-shrink: 0; }
+  .status-dot.on { background: #22c55e; }
+  .status-dot.off { background: #3f3f46; }
+
+  /* ────────────────────────────────────────
+     CHAT
+     ──────────────────────────────────────── */
+  .chat { flex: 1; display: flex; flex-direction: column; background: var(--chat-bg); overflow: hidden; }
+  .chat-header {
+    padding: 14px 18px 11px;
+    border-bottom: 1px solid var(--border);
+    background: var(--topbar-bg); flex-shrink: 0;
+  }
+  .chat-title { font-weight: 600; font-size: 13px; color: var(--text); }
+  .chat-sub { font-size: 10px; color: var(--muted); margin-top: 1px; }
+  .messages { flex: 1; padding: 16px 18px; display: flex; flex-direction: column; gap: 14px; overflow: hidden; }
+
+  .msg { display: flex; gap: 9px; }
+  .msg.user { flex-direction: row-reverse; }
+  .msg-avatar {
+    width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; margin-top: 1px;
+  }
+  .msg-avatar.ai { background: var(--brand-grad); color: #fff; }
+  .msg-avatar.user { background: var(--accent); color: #fff; font-weight: 600; }
+  .bubble {
+    max-width: 68%; padding: 9px 13px; border-radius: 13px;
+    font-size: 12px; line-height: 1.6;
+  }
+  .bubble.ai { background: var(--ai-bubble); color: var(--ai-text); }
+  .bubble.user { background: var(--user-bubble); color: var(--user-text); }
+
+  .tool-call {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--tool-call-bg); border-radius: 6px;
+    padding: 3px 8px; font-size: 10px; margin-top: 5px; color: var(--tool-call-text);
+  }
+  .tool-call img { width: 12px; height: 12px; border-radius: 3px; }
+  .tc-dot { width: 5px; height: 5px; border-radius: 50%; background: #4ade80; flex-shrink: 0; }
+
+  .chips { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 8px; }
+  .chip {
+    padding: 5px 11px; border-radius: 20px; font-size: 10.5px;
+    border: 1px solid var(--chip-border); background: var(--chip-bg); color: var(--chip-text);
+    cursor: pointer;
+  }
+
+  .input-bar {
+    padding: 12px 16px; flex-shrink: 0;
+    border-top: 1px solid var(--border);
+    background: var(--topbar-bg);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .input-field {
+    flex: 1; background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px; padding: 9px 13px;
+    color: var(--muted); font-size: 12px;
+  }
+  .send {
+    width: 34px; height: 34px; border-radius: 10px;
+    background: var(--brand-grad); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 14px;
+    cursor: pointer; flex-shrink: 0;
+  }
+
+  /* ────────────────────────────────────────
+     CONTEXT PANEL
+     ──────────────────────────────────────── */
+  .ctx {
+    width: 218px; flex-shrink: 0;
+    background: var(--sidebar-bg);
+    border-left: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .ctx-header {
+    padding: 14px 14px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .ctx-title { font-weight: 600; font-size: 13px; color: var(--text); }
+  .ctx-sub { font-size: 10px; color: var(--muted); margin-top: 1px; }
+  .ctx-tabs {
+    display: flex; padding: 8px; gap: 3px;
+  }
+  .ctx-tab {
+    flex: 1; padding: 6px 4px; border-radius: 7px;
+    font-size: 10px; font-weight: 600; text-align: center;
+    color: var(--muted); cursor: pointer;
+  }
+  .ctx-tab.active { background: var(--pill); color: var(--text); }
+  .notifs { padding: 6px 8px; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+  .notif {
+    background: var(--chat-bg); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px;
+  }
+  .notif-row { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; }
+  .notif-icon-wrap {
+    width: 26px; height: 26px; border-radius: 7px;
+    background: var(--pill); display: flex; align-items: center;
+    justify-content: center; overflow: hidden; flex-shrink: 0;
+  }
+  .notif-icon-wrap img { width: 16px; height: 16px; object-fit: contain; }
+  .badge {
+    padding: 2px 7px; border-radius: 20px; font-size: 9.5px; font-weight: 600;
+  }
+  .badge.urgent { background: rgba(239,68,68,0.12); color: #ef4444; }
+  .badge.medium { background: rgba(245,158,11,0.12); color: #f59e0b; }
+  .notif-title { font-size: 11px; font-weight: 500; color: var(--text); line-height: 1.4; margin-bottom: 4px; }
+  .notif-meta { font-size: 10px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+  .notif-meta img { width: 11px; height: 11px; border-radius: 2px; }
+
+  /* Sync strip */
+  .sync-strip {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 10px; border-radius: 8px; font-size: 10px;
+    margin-bottom: 8px;
+    background: var(--pill); color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .sync-dot { width: 6px; height: 6px; border-radius: 50%; background: #22c55e; }
+
+  /* ────────────────────────────────────────
+     DESCRIPTION
+     ──────────────────────────────────────── */
+  .desc {
+    margin-top: 16px; padding: 18px 20px;
+    background: #181818; border-radius: 12px; border: 1px solid #262626;
+  }
+  .desc h3 { font-size: 15px; font-weight: 600; margin-bottom: 7px; }
+  .desc p { font-size: 13px; color: #999; line-height: 1.65; margin-bottom: 12px; }
+  .tags { display: flex; gap: 7px; flex-wrap: wrap; }
+  .tag {
+    padding: 4px 11px; border-radius: 20px; font-size: 11px; font-weight: 500;
+    background: #222; border: 1px solid #333; color: #aaa;
+  }
+
+  /* ────────────────────────────────────────
+     DIRECTION THEMES
+     ──────────────────────────────────────── */
+
+  /* A — Refined Corporate */
+  #dir-a {
+    --bg: #f5f7fa;
+    --topbar-bg: rgba(255,255,255,0.92);
+    --sidebar-bg: #ffffff;
+    --chat-bg: #eff3f8;
+    --border: #e2e8f0;
+    --text: #0f172a;
+    --muted: #64748b;
+    --accent: #2563eb;
+    --brand-grad: linear-gradient(135deg,#2563eb,#3b82f6);
+    --pill: #eff6ff;
+    --input-bg: #ffffff;
+    --ai-bubble: linear-gradient(135deg,#2563eb,#3b82f6);
+    --ai-text: #ffffff;
+    --user-bubble: #e8edf5;
+    --user-text: #0f172a;
+    --chip-bg: #fff;
+    --chip-border: #dde3eb;
+    --chip-text: #64748b;
+    --tool-call-bg: rgba(255,255,255,0.2);
+    --tool-call-text: rgba(255,255,255,0.85);
+  }
+  #dir-a .dashboard { background: var(--bg); }
+
+  /* B — Modern Dark-First */
+  #dir-b {
+    --bg: #080c14;
+    --topbar-bg: #0f1629;
+    --sidebar-bg: #0b1120;
+    --chat-bg: #0d1525;
+    --border: #1e2d4a;
+    --text: #e2e8f0;
+    --muted: #4a6080;
+    --accent: #818cf8;
+    --brand-grad: linear-gradient(135deg,#6366f1,#818cf8);
+    --pill: rgba(129,140,248,0.1);
+    --input-bg: #080c14;
+    --ai-bubble: linear-gradient(135deg,#6366f1,#818cf8);
+    --ai-text: #ffffff;
+    --user-bubble: #1a2540;
+    --user-text: #d1d5db;
+    --chip-bg: rgba(255,255,255,0.06);
+    --chip-border: rgba(255,255,255,0.1);
+    --chip-text: rgba(255,255,255,0.6);
+    --tool-call-bg: rgba(255,255,255,0.12);
+    --tool-call-text: rgba(255,255,255,0.8);
+  }
+  #dir-b .dashboard { background: var(--bg); }
+  #dir-b .bubble.ai { box-shadow: 0 0 20px rgba(99,102,241,0.25); }
+  #dir-b .send { box-shadow: 0 0 12px rgba(129,140,248,0.35); }
+  #dir-b .brand-icon { box-shadow: 0 0 14px rgba(129,140,248,0.4); }
+
+  /* C — Clean Minimal */
+  #dir-c {
+    --bg: #fafafa;
+    --topbar-bg: #ffffff;
+    --sidebar-bg: #fafafa;
+    --chat-bg: #ffffff;
+    --border: #e8e8e8;
+    --text: #111111;
+    --muted: #9a9a9a;
+    --accent: #111111;
+    --brand-grad: #111111;
+    --pill: #f0f0f0;
+    --input-bg: #f5f5f5;
+    --ai-bubble: #f0f0f0;
+    --ai-text: #111111;
+    --user-bubble: #111111;
+    --user-text: #ffffff;
+    --chip-bg: #fff;
+    --chip-border: #e0e0e0;
+    --chip-text: #777;
+    --tool-call-bg: rgba(0,0,0,0.07);
+    --tool-call-text: #555;
+  }
+  #dir-c .dashboard { background: var(--bg); }
+  #dir-c .brand-icon { background: #111; }
+  #dir-c .new-chat { background: #111; }
+  #dir-c .send { background: #111; }
+  #dir-c .msg-avatar.ai { background: #111; }
+  #dir-c .msg-avatar.user { background: #111; }
+</style>
+</head>
+<body>
+
+<h1>ByteOps — Design Directions</h1>
+<p class="subtitle">Full dashboard preview with real brand icons. Click a tab to switch styles.</p>
+
+<div class="tabs">
+  <div class="tab active" onclick="show('a',this)">A — Refined Corporate</div>
+  <div class="tab" onclick="show('b',this)">B — Modern Dark-First</div>
+  <div class="tab" onclick="show('c',this)">C — Clean & Minimal</div>
+</div>
+
+<!-- shared icon URLs -->
+<script>
+  const ICONS = {
+    gmail:    'https://www.google.com/s2/favicons?domain=gmail.com&sz=64',
+    calendar: 'https://www.google.com/s2/favicons?domain=calendar.google.com&sz=64',
+    slack:    'https://www.google.com/s2/favicons?domain=slack.com&sz=64',
+    github:   'https://www.google.com/s2/favicons?domain=github.com&sz=64',
+    jira:     'https://www.google.com/s2/favicons?domain=jira.atlassian.com&sz=64',
+    trello:   'https://www.google.com/s2/favicons?domain=trello.com&sz=64',
+    dropbox:  'https://www.google.com/s2/favicons?domain=dropbox.com&sz=64',
+  };
+
+  function img(tool, size=18) {
+    return `<img src="${ICONS[tool]}" width="${size}" height="${size}" style="border-radius:3px">`;
+  }
+
+  // Inject icons everywhere after DOM ready
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-icon]').forEach(el => {
+      const tool = el.getAttribute('data-icon');
+      const size = el.getAttribute('data-size') || 18;
+      el.innerHTML = `<img src="${ICONS[tool]}" width="${size}" height="${size}" style="border-radius:3px">`;
+    });
+  });
+</script>
+
+<!-- ═══════════════════════════════════════════════
+     DIRECTION A — Refined Corporate
+     ═══════════════════════════════════════════════ -->
+<div class="direction visible" id="dir-a">
+  <div class="dashboard">
+
+    <div class="topbar">
+      <div class="brand">
+        <div class="brand-icon">✦</div>
+        <div>
+          <div class="brand-name">ByteOps</div>
+          <div class="brand-sub">AI Work Assistant</div>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="icon-btn">☀️</div>
+        <div class="icon-btn">⚙</div>
+        <div class="avatar"></div>
+      </div>
+    </div>
+
+    <div class="body">
+
+      <!-- Sidebar -->
+      <div class="sidebar">
+        <div class="new-chat">＋ New Chat</div>
+        <div class="sec-label">Chats</div>
+        <div class="convo active"><div class="convo-dot"></div>Summarize emails</div>
+        <div class="convo"><div class="convo-dot" style="opacity:.3"></div>Calendar check</div>
+        <div class="convo"><div class="convo-dot" style="opacity:.3"></div>GitHub PRs</div>
+        <div class="divider"></div>
+        <div class="sec-label">Connected Tools</div>
+        <div class="tool">
+          <div class="tool-icon-wrap" data-icon="gmail" data-size="18"></div>
+          <span>Gmail</span>
+          <div class="status-dot on"></div>
+        </div>
+        <div class="tool">
+          <div class="tool-icon-wrap" data-icon="calendar" data-size="18"></div>
+          <span>Calendar</span>
+          <div class="status-dot off"></div>
+        </div>
+        <div class="tool">
+          <div class="tool-icon-wrap" data-icon="slack" data-size="18"></div>
+          <span>Slack</span>
+          <div class="status-dot off"></div>
+        </div>
+        <div class="tool">
+          <div class="tool-icon-wrap" data-icon="github" data-size="18"></div>
+          <span>GitHub</span>
+          <div class="status-dot off"></div>
+        </div>
+        <div class="tool">
+          <div class="tool-icon-wrap" data-icon="jira" data-size="18"></div>
+          <span>JIRA</span>
+          <div class="status-dot off"></div>
+        </div>
+        <div class="tool">
+          <div class="tool-icon-wrap" data-icon="trello" data-size="18"></div>
+          <span>Trello</span>
+          <div class="status-dot off"></div>
+        </div>
+        <div class="tool">
+          <div class="tool-icon-wrap" data-icon="dropbox" data-size="18"></div>
+          <span>Dropbox</span>
+          <div class="status-dot off"></div>
+        </div>
+      </div>
+
+      <!-- Chat -->
+      <div class="chat">
+        <div class="chat-header">
+          <div class="chat-title">ByteOps AI</div>
+          <div class="chat-sub">Your AI productivity assistant</div>
+        </div>
+        <div class="messages">
+          <div class="msg">
+            <div class="msg-avatar ai">✦</div>
+            <div class="bubble ai">
+              Hello! I can help with Gmail, Calendar, Slack and more. What would you like to do today?
+              <div class="chips">
+                <span class="chip">Summarize emails</span>
+                <span class="chip">What's on my calendar?</span>
+                <span class="chip">Show open PRs</span>
+              </div>
+            </div>
+          </div>
+          <div class="msg user">
+            <div class="msg-avatar user">R</div>
+            <div class="bubble user">Summarize my unread emails from today</div>
+          </div>
+          <div class="msg">
+            <div class="msg-avatar ai">✦</div>
+            <div class="bubble ai">
+              <div class="tool-call">
+                <div class="tc-dot"></div>
+                <span data-icon="gmail" data-size="12"></span>
+                Reading Gmail inbox…
+              </div>
+              <br>You have <strong>4 unread emails</strong>. Top priority: your manager needs a reply re: Q3 Review by EOD today.
+            </div>
+          </div>
+        </div>
+        <div class="input-bar">
+          <div class="input-field">Ask anything about your tools…</div>
+          <div class="icon-btn">📎</div>
+          <div class="icon-btn">🎤</div>
+          <div class="send">➤</div>
+        </div>
+      </div>
+
+      <!-- Context Panel -->
+      <div class="ctx">
+        <div class="ctx-header">
+          <div class="ctx-title">Activity</div>
+          <div class="ctx-sub">Your workspace overview</div>
+        </div>
+        <div class="ctx-tabs">
+          <div class="ctx-tab">Flows</div>
+          <div class="ctx-tab active">Alerts</div>
+          <div class="ctx-tab">Tasks</div>
+        </div>
+        <div class="notifs">
+          <div class="sync-strip">
+            <div class="sync-dot"></div>
+            Synced just now · next in 14 min
+          </div>
+          <div class="notif">
+            <div class="notif-row">
+              <div class="notif-icon-wrap" data-icon="gmail" data-size="16"></div>
+              <span class="badge urgent">urgent</span>
+            </div>
+            <div class="notif-title">Q3 Review — reply needed by EOD</div>
+            <div class="notif-meta"><span data-icon="gmail" data-size="11"></span> Gmail · 12m ago</div>
+          </div>
+          <div class="notif">
+            <div class="notif-row">
+              <div class="notif-icon-wrap" data-icon="calendar" data-size="16"></div>
+              <span class="badge medium">medium</span>
+            </div>
+            <div class="notif-title">Team standup in 30 minutes</div>
+            <div class="notif-meta"><span data-icon="calendar" data-size="11"></span> Calendar · 5m ago</div>
+          </div>
+          <div class="notif">
+            <div class="notif-row">
+              <div class="notif-icon-wrap" data-icon="github" data-size="16"></div>
+              <span class="badge" style="background:#f0f9ff;color:#0ea5e9">low</span>
+            </div>
+            <div class="notif-title">PR #47 — 2 review comments</div>
+            <div class="notif-meta"><span data-icon="github" data-size="11"></span> GitHub · 1h ago</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="desc">
+    <h3>A — Refined Corporate</h3>
+    <p>Elevates the current design with glassmorphism on the topbar, richer card shadows, tighter grid, and polished micro-interactions. Same trusted blue palette — dramatically better execution. Real brand icons replace emoji/generic icons everywhere.</p>
+    <div class="tags">
+      <span class="tag">Blue primary</span>
+      <span class="tag">Glassmorphism topbar</span>
+      <span class="tag">Real brand icons</span>
+      <span class="tag">Light + dark modes</span>
+      <span class="tag">Like: Linear, Notion, Loom</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     DIRECTION B — Modern Dark-First
+     ═══════════════════════════════════════════════ -->
+<div class="direction" id="dir-b">
+  <div class="dashboard">
+    <div class="topbar">
+      <div class="brand">
+        <div class="brand-icon">✦</div>
+        <div>
+          <div class="brand-name">ByteOps</div>
+          <div class="brand-sub">AI Work Assistant</div>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="icon-btn">☀️</div>
+        <div class="icon-btn">⚙</div>
+        <div class="avatar"></div>
+      </div>
+    </div>
+    <div class="body">
+      <div class="sidebar">
+        <div class="new-chat">＋ New Chat</div>
+        <div class="sec-label">Chats</div>
+        <div class="convo active"><div class="convo-dot"></div>Summarize emails</div>
+        <div class="convo"><div class="convo-dot" style="opacity:.3"></div>Calendar check</div>
+        <div class="convo"><div class="convo-dot" style="opacity:.3"></div>GitHub PRs</div>
+        <div class="divider"></div>
+        <div class="sec-label">Connected Tools</div>
+        <div class="tool">
+          <div class="tool-icon-wrap" data-icon="gmail" data-size="18"></div>
+          <span>Gmail</span><div class="status-dot on"></div>
+        </div>
+        <div class="tool">
+          <div class="tool-icon-wrap" data-icon="calendar" data-size="18"></div>
+          <span>Calendar</span><div class="status-dot off"></div>
+        </div>
+        <div class="tool">
+          <div class="tool-icon-wrap" data-icon="slack" data-size="18"></div>
+          <span>Slack</span><div class="status-dot off"></div>
+        </div>
+        <div class="tool">
+          <div class="tool-icon-wrap" data-icon="github" data-size="18"></div>
+          <span>GitHub</span><div class="status-dot off"></div>
+        </div>
+        <div class="tool">
+          <div class="tool-icon-wrap" data-icon="jira" data-size="18"></div>
+          <span>JIRA</span><div class="status-dot off"></div>
+        </div>
+        <div class="tool">
+          <div class="tool-icon-wrap" data-icon="trello" data-size="18"></div>
+          <span>Trello</span><div class="status-dot off"></div>
+        </div>
+        <div class="tool">
+          <div class="tool-icon-wrap" data-icon="dropbox" data-size="18"></div>
+          <span>Dropbox</span><div class="status-dot off"></div>
+        </div>
+      </div>
+      <div class="chat">
+        <div class="chat-header">
+          <div class="chat-title">ByteOps AI</div>
+          <div class="chat-sub">Your AI productivity assistant</div>
+        </div>
+        <div class="messages">
+          <div class="msg">
+            <div class="msg-avatar ai">✦</div>
+            <div class="bubble ai">
+              Hello! I can help with Gmail, Calendar, Slack and more. What would you like to do today?
+              <div class="chips">
+                <span class="chip">Summarize emails</span>
+                <span class="chip">What's on my calendar?</span>
+                <span class="chip">Show open PRs</span>
+              </div>
+            </div>
+          </div>
+          <div class="msg user">
+            <div class="msg-avatar user">R</div>
+            <div class="bubble user">Summarize my unread emails from today</div>
+          </div>
+          <div class="msg">
+            <div class="msg-avatar ai">✦</div>
+            <div class="bubble ai">
+              <div class="tool-call">
+                <div class="tc-dot"></div>
+                <span data-icon="gmail" data-size="12"></span>
+                Reading Gmail inbox…
+              </div>
+              <br>You have <strong>4 unread emails</strong>. Top priority: your manager needs a reply re: Q3 Review by EOD today.
+            </div>
+          </div>
+        </div>
+        <div class="input-bar">
+          <div class="input-field">Ask anything about your tools…</div>
+          <div class="icon-btn">📎</div>
+          <div class="icon-btn">🎤</div>
+          <div class="send">➤</div>
+        </div>
+      </div>
+      <div class="ctx">
+        <div class="ctx-header">
+          <div class="ctx-title">Activity</div>
+          <div class="ctx-sub">Your workspace overview</div>
+        </div>
+        <div class="ctx-tabs">
+          <div class="ctx-tab">Flows</div>
+          <div class="ctx-tab active">Alerts</div>
+          <div class="ctx-tab">Tasks</div>
+        </div>
+        <div class="notifs">
+          <div class="sync-strip">
+            <div class="sync-dot"></div>
+            Synced just now · next in 14 min
+          </div>
+          <div class="notif">
+            <div class="notif-row">
+              <div class="notif-icon-wrap" data-icon="gmail" data-size="16"></div>
+              <span class="badge urgent" style="background:rgba(239,68,68,0.2);color:#f87171">urgent</span>
+            </div>
+            <div class="notif-title">Q3 Review — reply needed by EOD</div>
+            <div class="notif-meta"><span data-icon="gmail" data-size="11"></span> Gmail · 12m ago</div>
+          </div>
+          <div class="notif">
+            <div class="notif-row">
+              <div class="notif-icon-wrap" data-icon="calendar" data-size="16"></div>
+              <span class="badge medium" style="background:rgba(251,191,36,0.15);color:#fbbf24">medium</span>
+            </div>
+            <div class="notif-title">Team standup in 30 minutes</div>
+            <div class="notif-meta"><span data-icon="calendar" data-size="11"></span> Calendar · 5m ago</div>
+          </div>
+          <div class="notif">
+            <div class="notif-row">
+              <div class="notif-icon-wrap" data-icon="github" data-size="16"></div>
+              <span class="badge" style="background:rgba(14,165,233,0.15);color:#38bdf8">low</span>
+            </div>
+            <div class="notif-title">PR #47 — 2 review comments</div>
+            <div class="notif-meta"><span data-icon="github" data-size="11"></span> GitHub · 1h ago</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="desc">
+    <h3>B — Modern Dark-First</h3>
+    <p>Deep navy/midnight backgrounds, indigo-violet gradient accents with subtle glows on key elements. Brand icons pop on dark backgrounds with a slight luminosity. Every panel feels premium and intentional — built for extended night-mode use.</p>
+    <div class="tags">
+      <span class="tag">Indigo/violet accents</span>
+      <span class="tag">Deep dark backgrounds</span>
+      <span class="tag">Real brand icons</span>
+      <span class="tag">Glow on interactive elements</span>
+      <span class="tag">Like: Cursor, Vercel, Raycast</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     DIRECTION C — Clean & Minimal
+     ═══════════════════════════════════════════════ -->
+<div class="direction" id="dir-c">
+  <div class="dashboard">
+    <div class="topbar">
+      <div class="brand">
+        <div class="brand-icon">✦</div>
+        <div>
+          <div class="brand-name" style="color:#111">ByteOps</div>
+          <div class="brand-sub" style="color:#999">AI Work Assistant</div>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="icon-btn" style="background:transparent;color:#ccc">☀️</div>
+        <div class="icon-btn" style="background:transparent;color:#ccc">⚙</div>
+        <div class="avatar" style="background:#111"></div>
+      </div>
+    </div>
+    <div class="body">
+      <div class="sidebar">
+        <div class="new-chat">＋ New Chat</div>
+        <div class="sec-label" style="color:#bbb">Chats</div>
+        <div class="convo active" style="background:#ebebeb;color:#111"><div class="convo-dot" style="background:#111"></div>Summarize emails</div>
+        <div class="convo" style="color:#aaa"><div class="convo-dot" style="background:#ccc;opacity:.5"></div>Calendar check</div>
+        <div class="convo" style="color:#aaa"><div class="convo-dot" style="background:#ccc;opacity:.5"></div>GitHub PRs</div>
+        <div class="divider"></div>
+        <div class="sec-label" style="color:#bbb">Connected Tools</div>
+        <div class="tool" style="color:#333">
+          <div class="tool-icon-wrap" data-icon="gmail" data-size="18"></div>
+          <span>Gmail</span><div class="status-dot on"></div>
+        </div>
+        <div class="tool" style="color:#aaa">
+          <div class="tool-icon-wrap" data-icon="calendar" data-size="18"></div>
+          <span>Calendar</span><div class="status-dot" style="background:#ddd"></div>
+        </div>
+        <div class="tool" style="color:#aaa">
+          <div class="tool-icon-wrap" data-icon="slack" data-size="18"></div>
+          <span>Slack</span><div class="status-dot" style="background:#ddd"></div>
+        </div>
+        <div class="tool" style="color:#aaa">
+          <div class="tool-icon-wrap" data-icon="github" data-size="18"></div>
+          <span>GitHub</span><div class="status-dot" style="background:#ddd"></div>
+        </div>
+        <div class="tool" style="color:#aaa">
+          <div class="tool-icon-wrap" data-icon="jira" data-size="18"></div>
+          <span>JIRA</span><div class="status-dot" style="background:#ddd"></div>
+        </div>
+        <div class="tool" style="color:#aaa">
+          <div class="tool-icon-wrap" data-icon="trello" data-size="18"></div>
+          <span>Trello</span><div class="status-dot" style="background:#ddd"></div>
+        </div>
+        <div class="tool" style="color:#aaa">
+          <div class="tool-icon-wrap" data-icon="dropbox" data-size="18"></div>
+          <span>Dropbox</span><div class="status-dot" style="background:#ddd"></div>
+        </div>
+      </div>
+      <div class="chat" style="background:#fff">
+        <div class="chat-header" style="background:#fff;border-bottom:1px solid #ebebeb">
+          <div class="chat-title" style="color:#111">ByteOps AI</div>
+          <div class="chat-sub" style="color:#999">Your AI productivity assistant</div>
+        </div>
+        <div class="messages">
+          <div class="msg">
+            <div class="msg-avatar ai">✦</div>
+            <div class="bubble ai" style="background:#f2f2f2;color:#111">
+              Hello! I can help with Gmail, Calendar, Slack and more.
+              <div class="chips">
+                <span class="chip">Summarize emails</span>
+                <span class="chip">What's on my calendar?</span>
+                <span class="chip">Show open PRs</span>
+              </div>
+            </div>
+          </div>
+          <div class="msg user">
+            <div class="msg-avatar user">R</div>
+            <div class="bubble user" style="background:#111;color:#fff">Summarize my unread emails from today</div>
+          </div>
+          <div class="msg">
+            <div class="msg-avatar ai">✦</div>
+            <div class="bubble ai" style="background:#f2f2f2;color:#111">
+              <div class="tool-call" style="background:rgba(0,0,0,0.06);color:#666">
+                <div class="tc-dot"></div>
+                <span data-icon="gmail" data-size="12"></span>
+                Reading Gmail inbox…
+              </div>
+              <br>You have <strong>4 unread emails</strong>. Top priority: your manager needs a reply re: Q3 Review by EOD today.
+            </div>
+          </div>
+        </div>
+        <div class="input-bar" style="background:#fff;border-top:1px solid #ebebeb">
+          <div class="input-field" style="background:#f5f5f5;border-color:#e8e8e8;color:#aaa">Ask anything about your tools…</div>
+          <div class="icon-btn" style="background:transparent;color:#ccc">📎</div>
+          <div class="icon-btn" style="background:transparent;color:#ccc">🎤</div>
+          <div class="send" style="background:#111">➤</div>
+        </div>
+      </div>
+      <div class="ctx" style="background:#fafafa;border-left:1px solid #ebebeb">
+        <div class="ctx-header" style="border-bottom:1px solid #ebebeb">
+          <div class="ctx-title" style="color:#111">Activity</div>
+          <div class="ctx-sub" style="color:#999">Your workspace overview</div>
+        </div>
+        <div class="ctx-tabs">
+          <div class="ctx-tab" style="color:#bbb">Flows</div>
+          <div class="ctx-tab active" style="background:#ebebeb;color:#111">Alerts</div>
+          <div class="ctx-tab" style="color:#bbb">Tasks</div>
+        </div>
+        <div class="notifs">
+          <div class="sync-strip" style="background:#f5f5f5;border-color:#ebebeb;color:#aaa">
+            <div class="sync-dot"></div>
+            Synced just now · next in 14 min
+          </div>
+          <div class="notif" style="background:#fff;border-color:#ebebeb">
+            <div class="notif-row">
+              <div class="notif-icon-wrap" style="background:#f5f5f5" data-icon="gmail" data-size="16"></div>
+              <span class="badge urgent" style="background:#fee2e2;color:#ef4444">urgent</span>
+            </div>
+            <div class="notif-title" style="color:#111">Q3 Review — reply needed by EOD</div>
+            <div class="notif-meta" style="color:#aaa"><span data-icon="gmail" data-size="11"></span> Gmail · 12m ago</div>
+          </div>
+          <div class="notif" style="background:#fff;border-color:#ebebeb">
+            <div class="notif-row">
+              <div class="notif-icon-wrap" style="background:#f5f5f5" data-icon="calendar" data-size="16"></div>
+              <span class="badge medium" style="background:#fef3c7;color:#d97706">medium</span>
+            </div>
+            <div class="notif-title" style="color:#111">Team standup in 30 minutes</div>
+            <div class="notif-meta" style="color:#aaa"><span data-icon="calendar" data-size="11"></span> Calendar · 5m ago</div>
+          </div>
+          <div class="notif" style="background:#fff;border-color:#ebebeb">
+            <div class="notif-row">
+              <div class="notif-icon-wrap" style="background:#f5f5f5" data-icon="github" data-size="16"></div>
+              <span class="badge" style="background:#f0f9ff;color:#0ea5e9">low</span>
+            </div>
+            <div class="notif-title" style="color:#111">PR #47 — 2 review comments</div>
+            <div class="notif-meta" style="color:#aaa"><span data-icon="github" data-size="11"></span> GitHub · 1h ago</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="desc">
+    <h3>C — Clean & Minimal</h3>
+    <p>Near-monochrome palette with max whitespace. Brand icons are the only colour on the page — they naturally draw the eye to the tools. The UI steps back completely and lets the content breathe.</p>
+    <div class="tags">
+      <span class="tag">Near-monochrome</span>
+      <span class="tag">Brand icons = only colour</span>
+      <span class="tag">Maximum whitespace</span>
+      <span class="tag">Content-first</span>
+      <span class="tag">Like: Claude.ai, ChatGPT, Arc</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  function show(id, el) {
+    document.querySelectorAll('.direction').forEach(d => d.classList.remove('visible'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('dir-' + id).classList.add('visible');
+    el.classList.add('active');
+  }
+</script>
+</body>
+</html>

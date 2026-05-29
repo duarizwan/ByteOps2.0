@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign-In Redesign Approaches</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #0f172a; color: #f8fafc; padding: 24px; }
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 6px; color: #f1f5f9; }
+  .subtitle { font-size: 14px; color: #94a3b8; margin-bottom: 28px; }
+
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .card {
+    border: 2px solid #1e293b;
+    border-radius: 14px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: #1e293b;
+  }
+  .card:hover { border-color: #3b82f6; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(59,130,246,0.2); }
+  .card.selected { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.25); }
+
+  .card-label {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px;
+    background: #0f172a;
+    border-bottom: 1px solid #1e293b;
+  }
+  .card-label .letter {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: #3b82f6; color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 13px;
+  }
+  .card-label .name { font-size: 14px; font-weight: 600; color: #f1f5f9; }
+  .card-label .tag {
+    font-size: 11px; padding: 2px 8px; border-radius: 20px;
+    background: #1e3a5f; color: #93c5fd; font-weight: 500;
+  }
+  .card-label .tag.rec { background: #14532d; color: #86efac; }
+
+  .preview { padding: 16px; }
+
+  /* ─── Option A: Centered Card ─── */
+  .opt-a {
+    background: #f8fafc;
+    border-radius: 10px;
+    overflow: hidden;
+    height: 280px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+  .opt-a .bg-dots {
+    position: absolute; inset: 0;
+    background-image: radial-gradient(circle, #cbd5e1 1px, transparent 1px);
+    background-size: 20px 20px;
+    opacity: 0.4;
+  }
+  .opt-a .form-card {
+    position: relative; z-index: 1;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 24px 20px;
+    width: 200px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+  }
+  .opt-a .brand { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; justify-content: center; }
+  .opt-a .logo { width: 28px; height: 28px; border-radius: 8px; background: #0f172a; display: flex; align-items: center; justify-content: center; }
+  .opt-a .logo span { color: #fff; font-weight: 700; font-size: 12px; }
+  .opt-a .brand-name { font-size: 13px; font-weight: 700; color: #0f172a; }
+  .opt-a .form-title { font-size: 14px; font-weight: 700; color: #0f172a; margin-bottom: 4px; text-align: center; }
+  .opt-a .form-sub { font-size: 10px; color: #64748b; margin-bottom: 14px; text-align: center; }
+  .mock-field {
+    height: 26px; border-radius: 6px;
+    background: #f1f5f9; border: 1px solid #e2e8f0;
+    margin-bottom: 8px; width: 100%;
+  }
+  .mock-btn {
+    height: 28px; border-radius: 6px;
+    background: #2563eb;
+    width: 100%; margin-top: 4px;
+  }
+  .mock-divider { display: flex; align-items: center; gap: 6px; margin: 10px 0; }
+  .mock-divider span { font-size: 9px; color: #94a3b8; }
+  .mock-divider hr { flex: 1; border: none; border-top: 1px solid #e2e8f0; }
+  .mock-social {
+    height: 24px; border-radius: 6px;
+    background: #f8fafc; border: 1px solid #e2e8f0;
+    margin-bottom: 6px; width: 100%;
+  }
+
+  /* ─── Option B: Left Dark Panel (Current but Modernized) ─── */
+  .opt-b {
+    background: #f8fafc;
+    border-radius: 10px;
+    overflow: hidden;
+    height: 280px;
+    display: flex;
+  }
+  .opt-b .left-panel {
+    width: 45%;
+    background: linear-gradient(160deg, #020817 0%, #0d1a33 100%);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+    overflow: hidden;
+  }
+  .opt-b .left-panel::after {
+    content: '';
+    position: absolute;
+    top: -40px; right: -40px;
+    width: 120px; height: 120px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(59,130,246,0.15) 0%, transparent 70%);
+  }
+  .opt-b .panel-logo { display: flex; align-items: center; gap: 6px; }
+  .opt-b .panel-logo .dot { width: 20px; height: 20px; border-radius: 6px; background: #1e293b; border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; }
+  .opt-b .panel-logo .dot span { color: #fff; font-size: 10px; font-weight: 700; }
+  .opt-b .panel-logo .name { color: #f1f5f9; font-size: 11px; font-weight: 600; }
+  .opt-b .panel-hero { }
+  .opt-b .panel-title { color: #f1f5f9; font-size: 13px; font-weight: 700; line-height: 1.3; margin-bottom: 8px; }
+  .opt-b .panel-sub { color: #64748b; font-size: 9px; line-height: 1.4; margin-bottom: 10px; }
+  .opt-b .feature { display: flex; align-items: center; gap: 5px; margin-bottom: 4px; }
+  .opt-b .feature .check { width: 10px; height: 10px; border-radius: 50%; background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .opt-b .feature .check::after { content: '✓'; font-size: 6px; color: #60a5fa; }
+  .opt-b .feature span { font-size: 8px; color: #94a3b8; }
+  .opt-b .panel-copy { color: #334155; font-size: 7px; }
+  .opt-b .right-form {
+    flex: 1;
+    background: #fff;
+    padding: 18px 14px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .opt-b .form-h { font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 3px; }
+  .opt-b .form-p { font-size: 9px; color: #64748b; margin-bottom: 12px; }
+
+  /* ─── Option C: Asymmetric Split — Geometric Left ─── */
+  .opt-c {
+    background: #f8fafc;
+    border-radius: 10px;
+    overflow: hidden;
+    height: 280px;
+    display: flex;
+  }
+  .opt-c .left-panel {
+    width: 50%;
+    background: #0f172a;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+    overflow: hidden;
+  }
+  .opt-c .geo-accent {
+    position: absolute;
+    bottom: -30px; left: -30px;
+    width: 120px; height: 120px;
+    border: 2px solid rgba(59,130,246,0.2);
+    border-radius: 30px;
+    transform: rotate(20deg);
+  }
+  .opt-c .geo-accent2 {
+    position: absolute;
+    top: 20px; right: -20px;
+    width: 80px; height: 80px;
+    border: 1px solid rgba(99,102,241,0.15);
+    border-radius: 20px;
+    transform: rotate(-15deg);
+  }
+  .opt-c .panel-logo { display: flex; align-items: center; gap: 6px; position: relative; z-index: 1; }
+  .opt-c .panel-logo .dot { width: 22px; height: 22px; border-radius: 7px; background: #2563eb; display: flex; align-items: center; justify-content: center; }
+  .opt-c .panel-logo .dot span { color: #fff; font-size: 11px; font-weight: 700; }
+  .opt-c .panel-logo .name { color: #f1f5f9; font-size: 12px; font-weight: 700; letter-spacing: -0.3px; }
+  .opt-c .panel-content { position: relative; z-index: 1; }
+  .opt-c .panel-title { color: #fff; font-size: 15px; font-weight: 800; line-height: 1.25; margin-bottom: 8px; }
+  .opt-c .panel-title em { color: #60a5fa; font-style: normal; }
+  .opt-c .panel-sub { color: #475569; font-size: 9px; line-height: 1.5; margin-bottom: 10px; }
+  .opt-c .tool-row { display: flex; gap: 5px; }
+  .opt-c .tool-chip {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px;
+    padding: 3px 7px;
+    font-size: 8px;
+    color: #94a3b8;
+  }
+  .opt-c .panel-copy { color: #1e293b; font-size: 7px; position: relative; z-index: 1; }
+
+  .opt-c .right-form {
+    flex: 1;
+    background: #f8fafc;
+    padding: 18px 14px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .opt-c .form-h { font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 3px; }
+  .opt-c .form-p { font-size: 9px; color: #64748b; margin-bottom: 12px; }
+
+  /* shared form bits */
+  .form-area .field { height: 22px; border-radius: 5px; background: #f1f5f9; border: 1px solid #e2e8f0; margin-bottom: 7px; width: 100%; }
+  .form-area .btn { height: 24px; border-radius: 5px; background: #2563eb; width: 100%; margin-top: 2px; }
+  .form-area .divider { display: flex; align-items: center; gap: 5px; margin: 8px 0; }
+  .form-area .divider span { font-size: 8px; color: #94a3b8; }
+  .form-area .divider hr { flex: 1; border: none; border-top: 1px solid #e2e8f0; }
+  .form-area .social { height: 20px; border-radius: 5px; background: #fff; border: 1px solid #e2e8f0; margin-bottom: 5px; width: 100%; }
+
+  /* selected tick overlay */
+  .card.selected .card-label .letter { background: #22c55e; }
+
+  /* footer note */
+  .note { margin-top: 24px; font-size: 12px; color: #475569; background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px 16px; }
+  .note strong { color: #93c5fd; }
+</style>
+<script>
+  function toggleSelect(card) {
+    document.querySelectorAll('.card').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    const choice = card.dataset.choice;
+    const text = card.querySelector('.name').textContent;
+    if (window.recordChoice) recordChoice(choice, text);
+  }
+</script>
+</head>
+<body>
+<h1>Sign-In Screen — Redesign Approaches</h1>
+<p class="subtitle">Which direction feels right for ByteOps? Click to select your preference.</p>
+
+<div class="cards">
+
+  <!-- Option A -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-label">
+      <div class="letter">A</div>
+      <div class="name">Centered Card</div>
+      <div class="tag">ByteCorp-inspired</div>
+    </div>
+    <div class="preview">
+      <div class="opt-a">
+        <div class="bg-dots"></div>
+        <div class="form-card">
+          <div class="brand">
+            <div class="logo"><span>b</span></div>
+            <span class="brand-name">ByteOps</span>
+          </div>
+          <div class="form-title">Welcome back</div>
+          <div class="form-sub">Sign in to your workspace</div>
+          <div class="mock-social"></div>
+          <div class="mock-divider"><hr><span>or</span><hr></div>
+          <div class="mock-field"></div>
+          <div class="mock-field"></div>
+          <div class="mock-btn"></div>
+        </div>
+      </div>
+      <div style="padding: 10px 4px 4px; font-size: 11px; color: #94a3b8; line-height: 1.5;">
+        Clean single card centered on a soft dot-grid background. Modern, minimal, inspired by ByteCorp.io's whitespace-first philosophy. No left panel.
+      </div>
+    </div>
+  </div>
+
+  <!-- Option B -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-label">
+      <div class="letter">B</div>
+      <div class="name">Dark Left + Light Right</div>
+      <div class="tag rec">⭐ Recommended</div>
+    </div>
+    <div class="preview">
+      <div class="opt-b">
+        <div class="left-panel">
+          <div class="panel-logo">
+            <div class="dot"><span>b</span></div>
+            <div class="name">ByteOps</div>
+          </div>
+          <div class="panel-hero">
+            <div class="panel-title">Your AI-powered<br>work assistant</div>
+            <div class="panel-sub">Connect tools. Chat with AI.<br>Get more done.</div>
+            <div class="feature"><div class="check"></div><span>Summarize emails</span></div>
+            <div class="feature"><div class="check"></div><span>Manage calendar</span></div>
+            <div class="feature"><div class="check"></div><span>Track GitHub PRs</span></div>
+          </div>
+          <div class="panel-copy">© 2026 ByteOps</div>
+        </div>
+        <div class="right-form">
+          <div class="form-h">Welcome back</div>
+          <div class="form-p">Sign in to your ByteOps workspace</div>
+          <div class="form-area">
+            <div class="social"></div>
+            <div class="divider"><hr><span>or</span><hr></div>
+            <div class="field"></div>
+            <div class="field"></div>
+            <div class="btn"></div>
+          </div>
+        </div>
+      </div>
+      <div style="padding: 10px 4px 4px; font-size: 11px; color: #94a3b8; line-height: 1.5;">
+        Keeps the existing left/right layout but modernizes it — removes Clerk's blue card outline, pure white right panel, polished dark hero with subtle glow. Familiar structure, clean execution.
+      </div>
+    </div>
+  </div>
+
+  <!-- Option C -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-label">
+      <div class="letter">C</div>
+      <div class="name">Geometric Dark Split</div>
+      <div class="tag">Bold / Branded</div>
+    </div>
+    <div class="preview">
+      <div class="opt-c">
+        <div class="left-panel">
+          <div class="geo-accent"></div>
+          <div class="geo-accent2"></div>
+          <div class="panel-logo">
+            <div class="dot"><span>b</span></div>
+            <div class="name">ByteOps</div>
+          </div>
+          <div class="panel-content">
+            <div class="panel-title">Work <em>smarter</em><br>with AI</div>
+            <div class="panel-sub">Your intelligent assistant for Gmail, Slack, GitHub, JIRA and more.</div>
+            <div class="tool-row">
+              <div class="tool-chip">Gmail</div>
+              <div class="tool-chip">Slack</div>
+              <div class="tool-chip">GitHub</div>
+              <div class="tool-chip">JIRA</div>
+            </div>
+          </div>
+          <div class="panel-copy">© 2026 ByteOps</div>
+        </div>
+        <div class="right-form">
+          <div class="form-h">Welcome back</div>
+          <div class="form-p">Sign in to your workspace</div>
+          <div class="form-area">
+            <div class="social"></div>
+            <div class="divider"><hr><span>or</span><hr></div>
+            <div class="field"></div>
+            <div class="field"></div>
+            <div class="btn"></div>
+          </div>
+        </div>
+      </div>
+      <div style="padding: 10px 4px 4px; font-size: 11px; color: #94a3b8; line-height: 1.5;">
+        Bold branding with geometric accent shapes on the left. Blue highlight on "smarter". Right panel uses the light app background. More editorial feel, 50/50 split.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="note">
+  <strong>Note on the blue rectangle:</strong> All three options eliminate the Clerk internal blue card box by adding <code>cardBox</code> styling to the Clerk appearance config and fixing the <code>colorPrimary</code> bleed. The form fields, divider, and buttons will all use the existing design system colors.
+</div>
+
+</body>
+</html>

@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>ByteOps — Blue vs Cream Theme</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #0c0f1a; color: #f1f5f9; min-height: 100vh; }
+
+  .page { max-width: 1080px; margin: 0 auto; padding: 36px 24px; }
+  h1.title { font-size: 20px; font-weight: 700; color: #f8fafc; margin-bottom: 4px; }
+  .subtitle { font-size: 12px; color: #475569; margin-bottom: 36px; }
+
+  /* Column headers */
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .col-label { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 10px; }
+  .col-label.blue  { color: #60a5fa; }
+  .col-label.cream { color: #d4a96a; }
+
+  /* Panel shell */
+  .panel { background: #141b2d; border: 1px solid #1e2d45; border-radius: 16px; overflow: hidden; margin-bottom: 20px; }
+
+  /* ──────────────────────────────────────────────
+     TOP BAR
+  ────────────────────────────────────────────── */
+  .topbar { height: 58px; background: rgba(20,27,45,0.97); border-bottom: 1px solid #1e2d45; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; }
+  .topbar-left { display: flex; align-items: center; gap: 11px; }
+  .topbar-right { display: flex; align-items: center; gap: 10px; }
+
+  .logo { width: 36px; height: 36px; border-radius: 11px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: transform 150ms; cursor: pointer; }
+  .logo:hover { transform: scale(0.97); }
+  .logo-blue  { background: linear-gradient(135deg, #1d4ed8, #3b82f6); }
+  .logo-cream { background: linear-gradient(135deg, #92703a, #c8a050); }
+  .logo svg { width: 16px; height: 16px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  .brand-name { font-size: 16px; font-weight: 600; color: #f8fafc; }
+  .brand-sub  { font-size: 11px; color: #475569; }
+
+  .icon-btn { width: 30px; height: 30px; background: transparent; border: none; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #64748b; }
+  .icon-btn:hover { background: #1e2d45; color: #94a3b8; }
+  .icon-btn svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; }
+  .user-avatar { width: 32px; height: 32px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 9px; }
+
+  /* ──────────────────────────────────────────────
+     CHAT
+  ────────────────────────────────────────────── */
+  .chat-body { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+
+  .msg { display: flex; gap: 9px; }
+  .msg.user { flex-direction: row-reverse; }
+
+  .av { width: 28px; height: 28px; border-radius: 9px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; font-size: 13px; font-weight: 800; color: #fff; letter-spacing: -0.5px; }
+  .av.ai-blue  { background: linear-gradient(135deg, #1d4ed8, #3b82f6); }
+  .av.ai-cream { background: linear-gradient(135deg, #92703a, #c8a050); }
+  .av.usr-blue  { background: #3b82f6; }
+  .av.usr-cream { background: #c8a050; color: #1a0e00; }
+  .av svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; }
+
+  .bubble { padding: 11px 14px; border-radius: 14px; font-size: 13px; line-height: 1.55; max-width: 76%; }
+  /* Blue AI bubble */
+  .bubble.ai-blue  { background: linear-gradient(135deg, #1d4ed8, #3b82f6); color: #fff; }
+  /* Cream AI bubble — warm ivory gradient, dark text */
+  .bubble.ai-cream { background: linear-gradient(135deg, #c8a050, #e8d090); color: #1a0e00; }
+  /* User bubble */
+  .bubble.usr { background: #1e2d45; color: #e2e8f0; border: 1px solid #2a3a55; }
+
+  /* Typing dots */
+  .dots { display: flex; gap: 4px; align-items: center; height: 16px; }
+  .dots span { width: 5px; height: 5px; border-radius: 50%; }
+  .dots.blue  span { background: rgba(255,255,255,0.75); animation: wave 1.2s ease-in-out infinite; }
+  .dots.cream span { background: rgba(26,14,0,0.55); animation: wave 1.2s ease-in-out infinite; }
+  .dots span:nth-child(2) { animation-delay: 150ms !important; }
+  .dots span:nth-child(3) { animation-delay: 300ms !important; }
+  @keyframes wave { 0%,100%{opacity:.3;transform:scale(.8)} 50%{opacity:1;transform:scale(1)} }
+
+  /* ──────────────────────────────────────────────
+     INPUT
+  ────────────────────────────────────────────── */
+  .input-bar { border-top: 1px solid #1e2d45; padding: 12px; background: rgba(20,27,45,.6); display: flex; gap: 9px; align-items: flex-end; }
+  textarea { flex: 1; background: #0c0f1a; border: 1px solid #1e2d45; border-radius: 10px; padding: 9px 13px; font-size: 13px; color: #e2e8f0; resize: none; font-family: inherit; outline: none; min-height: 42px; max-height: 140px; overflow-y: auto; line-height: 1.5; transition: border-color .15s; }
+  textarea::placeholder { color: #334155; }
+  textarea.blue-focus:focus  { border-color: #3b82f6; }
+  textarea.cream-focus:focus { border-color: #c8a050; }
+
+  .send { width: 34px; height: 34px; border: none; border-radius: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .send svg { width: 13px; height: 13px; stroke: #fff; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+  .send.blue  { background: linear-gradient(135deg, #1d4ed8, #3b82f6); }
+  .send.cream { background: linear-gradient(135deg, #92703a, #c8a050); }
+
+  /* ──────────────────────────────────────────────
+     SIDEBAR TOOLS
+  ────────────────────────────────────────────── */
+  .tools-section { padding: 12px 8px; background: #0c0f1a; }
+  .tools-label { font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #1e2d45; padding: 0 8px 8px; }
+  .tool-row { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 9px; cursor: pointer; transition: background .15s; }
+  .tool-row:hover { background: #141b2d; }
+  .tool-icon { width: 15px; height: 15px; object-fit: contain; flex-shrink: 0; }
+  .tool-icon.ph { background: #1e2d45; border-radius: 3px; }
+  .tool-name { font-size: 12px; font-weight: 500; flex: 1; }
+  .tool-row.on  .tool-name { color: #e2e8f0; }
+  .tool-row.off .tool-name { color: #475569; }
+
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; transition: all .3s; }
+  .dot.off   { background: #334155; }
+  .dot.on-blue  { background: #22c55e; box-shadow: 0 0 6px 2px rgba(34,197,94,.45); }
+  .dot.on-cream { background: #22c55e; box-shadow: 0 0 6px 2px rgba(34,197,94,.45); }
+
+  /* ──────────────────────────────────────────────
+     TABS
+  ────────────────────────────────────────────── */
+  .tabs { display: flex; border-bottom: 1px solid #1e2d45; background: #0c0f1a; }
+  .tab { display: flex; align-items: center; gap: 5px; padding: 9px 13px; font-size: 12px; font-weight: 500; color: #475569; border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; }
+  .tab.active-blue  { color: #f1f5f9; border-bottom-color: #3b82f6; }
+  .tab.active-cream { color: #f1f5f9; border-bottom-color: #c8a050; }
+  .tab svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .badge-blue  { min-width:15px; height:15px; background:#3b82f6; color:#fff; border-radius:9999px; font-size:10px; display:flex; align-items:center; justify-content:center; padding:0 3px; }
+  .badge-cream { min-width:15px; height:15px; background:#c8a050; color:#1a0e00; border-radius:9999px; font-size:10px; display:flex; align-items:center; justify-content:center; padding:0 3px; }
+
+  /* section divider */
+  .section { margin-bottom: 32px; }
+  .section-title { font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #1e2d45; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px solid #141b2d; }
+
+  /* note */
+  .note { font-size: 11px; color: #334155; margin-top: 8px; }
+  .note span { color: #475569; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1 class="title">Blue vs Cream — Theme Comparison</h1>
+  <p class="subtitle">Same layout, same changes — only the accent colour differs.</p>
+
+  <!-- ── HEADER ── -->
+  <div class="section">
+    <div class="section-title">Top Bar</div>
+    <div class="cols">
+
+      <div>
+        <div class="col-label blue">Current — Blue</div>
+        <div class="panel">
+          <div class="topbar">
+            <div class="topbar-left">
+              <div class="logo logo-blue">
+                <svg viewBox="0 0 24 24"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+              </div>
+              <div><div class="brand-name">ByteOps</div><div class="brand-sub">AI Work Assistant</div></div>
+            </div>
+            <div class="topbar-right">
+              <button class="icon-btn"><svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
+              <button class="icon-btn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg></button>
+              <div class="user-avatar"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="col-label cream">Proposed — Cream</div>
+        <div class="panel">
+          <div class="topbar">
+            <div class="topbar-left">
+              <div class="logo logo-cream">
+                <svg viewBox="0 0 24 24"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+              </div>
+              <div><div class="brand-name">ByteOps</div><div class="brand-sub">AI Work Assistant</div></div>
+            </div>
+            <div class="topbar-right">
+              <button class="icon-btn"><svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
+              <button class="icon-btn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg></button>
+              <div class="user-avatar"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── CHAT ── -->
+  <div class="section">
+    <div class="section-title">Chat Interface — AI Avatar + Bubbles</div>
+    <div class="cols">
+
+      <div>
+        <div class="col-label blue">Current — Blue</div>
+        <div class="panel">
+          <div class="chat-body">
+            <div class="msg">
+              <div class="av ai-blue">b</div>
+              <div class="bubble ai-blue">Hello! I can help with Gmail, Calendar, GitHub and more.</div>
+            </div>
+            <div class="msg user">
+              <div class="av usr-blue">
+                <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              </div>
+              <div class="bubble usr">Summarize my emails from today</div>
+            </div>
+            <div class="msg">
+              <div class="av ai-blue">b</div>
+              <div class="bubble ai-blue">
+                Sure! Fetching your Gmail inbox now…
+              </div>
+            </div>
+            <div class="msg">
+              <div class="av ai-blue">b</div>
+              <div class="bubble ai-blue">
+                <div class="dots blue"><span></span><span></span><span></span></div>
+              </div>
+            </div>
+          </div>
+          <div class="input-bar">
+            <textarea class="blue-focus" placeholder="Type your message..."
+              oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,140)+'px'"></textarea>
+            <button class="send blue">
+              <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="col-label cream">Proposed — Cream</div>
+        <div class="panel">
+          <div class="chat-body">
+            <div class="msg">
+              <div class="av ai-cream">b</div>
+              <div class="bubble ai-cream">Hello! I can help with Gmail, Calendar, GitHub and more.</div>
+            </div>
+            <div class="msg user">
+              <div class="av usr-cream">
+                <svg viewBox="0 0 24 24" stroke="#1a0e00"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              </div>
+              <div class="bubble usr">Summarize my emails from today</div>
+            </div>
+            <div class="msg">
+              <div class="av ai-cream">b</div>
+              <div class="bubble ai-cream">
+                Sure! Fetching your Gmail inbox now…
+              </div>
+            </div>
+            <div class="msg">
+              <div class="av ai-cream">b</div>
+              <div class="bubble ai-cream">
+                <div class="dots cream"><span></span><span></span><span></span></div>
+              </div>
+            </div>
+          </div>
+          <div class="input-bar">
+            <textarea class="cream-focus" placeholder="Type your message..."
+              oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,140)+'px'"></textarea>
+            <button class="send cream">
+              <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── SIDEBAR ── -->
+  <div class="section">
+    <div class="section-title">Sidebar — Tool Connection Dots</div>
+    <div class="cols">
+
+      <div>
+        <div class="col-label blue">Current — Blue</div>
+        <div class="panel">
+          <div class="tools-section">
+            <div class="tools-label">Tools</div>
+            <div class="tool-row on">
+              <img class="tool-icon" src="https://upload.wikimedia.org/wikipedia/commons/7/7e/Gmail_icon_%282020%29.svg" onerror="this.className='tool-icon ph'" alt="Gmail"/>
+              <span class="tool-name">Gmail</span>
+              <div class="dot on-blue"></div>
+            </div>
+            <div class="tool-row on">
+              <img class="tool-icon" src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" onerror="this.className='tool-icon ph'" alt="Calendar"/>
+              <span class="tool-name">Calendar</span>
+              <div class="dot on-blue"></div>
+            </div>
+            <div class="tool-row off">
+              <div class="tool-icon ph"></div>
+              <span class="tool-name">Slack</span>
+              <div class="dot off"></div>
+            </div>
+            <div class="tool-row off">
+              <div class="tool-icon ph"></div>
+              <span class="tool-name">GitHub</span>
+              <div class="dot off"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="col-label cream">Proposed — Cream</div>
+        <div class="panel">
+          <div class="tools-section">
+            <div class="tools-label">Tools</div>
+            <div class="tool-row on">
+              <img class="tool-icon" src="https://upload.wikimedia.org/wikipedia/commons/7/7e/Gmail_icon_%282020%29.svg" onerror="this.className='tool-icon ph'" alt="Gmail"/>
+              <span class="tool-name">Gmail</span>
+              <div class="dot on-cream"></div>
+            </div>
+            <div class="tool-row on">
+              <img class="tool-icon" src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" onerror="this.className='tool-icon ph'" alt="Calendar"/>
+              <span class="tool-name">Calendar</span>
+              <div class="dot on-cream"></div>
+            </div>
+            <div class="tool-row off">
+              <div class="tool-icon ph"></div>
+              <span class="tool-name">Slack</span>
+              <div class="dot off"></div>
+            </div>
+            <div class="tool-row off">
+              <div class="tool-icon ph"></div>
+              <span class="tool-name">GitHub</span>
+              <div class="dot off"></div>
+            </div>
+          </div>
+        </div>
+        <div class="note"><span>Note:</span> The green connection dot stays green — it's a universal "connected/healthy" signal. Only the brand accent changes.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── TABS ── -->
+  <div class="section">
+    <div class="section-title">Context Panel — Active Tab Indicator</div>
+    <div class="cols">
+
+      <div>
+        <div class="col-label blue">Current — Blue</div>
+        <div class="panel">
+          <div class="tabs">
+            <div class="tab active-blue">
+              <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              Workflows
+            </div>
+            <div class="tab">
+              <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              Alerts
+              <span class="badge-blue">3</span>
+            </div>
+            <div class="tab">
+              <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+              Tasks
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="col-label cream">Proposed — Cream</div>
+        <div class="panel">
+          <div class="tabs">
+            <div class="tab active-cream">
+              <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              Workflows
+            </div>
+            <div class="tab">
+              <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              Alerts
+              <span class="badge-cream">3</span>
+            </div>
+            <div class="tab">
+              <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+              Tasks
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <p style="font-size:11px;color:#1e2d45;text-align:center;padding:12px 0 4px;">ByteOps · Theme Comparison · 2026-05-29</p>
+</div>
+<script>
+  document.querySelectorAll('textarea').forEach(t => {
+    t.style.height = 'auto';
+    t.style.height = Math.min(t.scrollHeight,140)+'px';
+  });
+</script>
+</body>
+</html>

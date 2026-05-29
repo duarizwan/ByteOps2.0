@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Landing Page Redesign</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter', system-ui, sans-serif; background: #0a0f1e; color: #f1f5f9; padding: 28px; }
+h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+.subtitle { font-size: 13px; color: #64748b; margin-bottom: 24px; }
+
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+
+.card {
+  border: 2px solid #1e293b;
+  border-radius: 14px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #111827;
+}
+.card:hover { border-color: #3b82f6; transform: translateY(-2px); box-shadow: 0 8px 32px rgba(59,130,246,0.2); }
+.card.selected { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.2); }
+
+.card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px;
+  background: #0a0f1e;
+  border-bottom: 1px solid #1e293b;
+}
+.letter {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: #3b82f6; color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 13px; flex-shrink: 0;
+}
+.card.selected .letter { background: #22c55e; }
+.card-name { font-size: 13px; font-weight: 600; color: #f1f5f9; }
+.badge {
+  font-size: 10px; padding: 2px 8px; border-radius: 20px;
+  background: #14532d; color: #86efac; font-weight: 500;
+}
+.badge.blue { background: #1e3a5f; color: #93c5fd; }
+
+.preview { padding: 14px; }
+
+/* ─────────────────── OPTION A: Dark Hero ─────────────────── */
+.a-screen {
+  border-radius: 8px; overflow: hidden;
+  background: #f8fafc;
+  height: 320px;
+  display: flex; flex-direction: column;
+}
+.a-nav {
+  background: #020817;
+  padding: 10px 18px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.a-nav .brand { display: flex; align-items: center; gap: 7px; }
+.a-nav .logo { width: 22px; height: 22px; border-radius: 6px; background: #2563eb; display: flex; align-items: center; justify-content: center; }
+.a-nav .logo span { color: #fff; font-size: 10px; font-weight: 800; }
+.a-nav .name { font-size: 12px; font-weight: 700; color: #f1f5f9; }
+.a-nav .cta { font-size: 10px; font-weight: 600; color: #fff; background: #2563eb; padding: 4px 10px; border-radius: 6px; }
+
+.a-hero {
+  background: linear-gradient(160deg, #020817 0%, #0d1a33 100%);
+  flex: 1;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 20px;
+  position: relative; overflow: hidden;
+  text-align: center;
+}
+.a-hero::before {
+  content: '';
+  position: absolute; top: -30px; left: 50%; transform: translateX(-50%);
+  width: 200px; height: 200px;
+  background: radial-gradient(circle, rgba(37,99,235,0.15) 0%, transparent 70%);
+}
+.a-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(37,99,235,0.1); border: 1px solid rgba(37,99,235,0.2);
+  color: #93c5fd; font-size: 9px; font-weight: 500;
+  padding: 4px 10px; border-radius: 20px; margin-bottom: 14px;
+}
+.a-title { font-size: 22px; font-weight: 800; color: #fff; line-height: 1.2; margin-bottom: 8px; letter-spacing: -0.5px; }
+.a-title span { background: linear-gradient(135deg, #3b82f6, #60a5fa); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.a-sub { font-size: 10px; color: #475569; line-height: 1.5; max-width: 240px; margin-bottom: 14px; }
+.a-btns { display: flex; gap: 8px; }
+.a-btn-primary { font-size: 10px; font-weight: 600; color: #fff; background: #2563eb; padding: 7px 14px; border-radius: 7px; }
+.a-btn-secondary { font-size: 10px; font-weight: 500; color: #64748b; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 7px 14px; border-radius: 7px; }
+.a-tools { display: flex; gap: 5px; position: absolute; bottom: 14px; }
+.a-chip { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 5px; padding: 3px 8px; font-size: 8px; color: #475569; }
+
+/* ─────────────────── OPTION B: Split Dark/Light ─────────────────── */
+.b-screen {
+  border-radius: 8px; overflow: hidden;
+  height: 320px;
+  display: flex; flex-direction: column;
+  background: #020817;
+}
+.b-nav {
+  padding: 10px 18px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.b-nav .brand { display: flex; align-items: center; gap: 7px; }
+.b-nav .logo { width: 22px; height: 22px; border-radius: 6px; background: #1e293b; border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; }
+.b-nav .logo span { color: #fff; font-size: 10px; font-weight: 800; }
+.b-nav .name { font-size: 12px; font-weight: 700; color: #f1f5f9; }
+.b-nav .cta { font-size: 10px; font-weight: 600; color: #fff; background: #2563eb; padding: 4px 10px; border-radius: 6px; }
+
+.b-body {
+  flex: 1;
+  display: flex;
+}
+.b-left {
+  width: 55%;
+  padding: 20px 18px;
+  display: flex; flex-direction: column; justify-content: center;
+  position: relative; overflow: hidden;
+}
+.b-left::after {
+  content: '';
+  position: absolute; top: -20px; right: -20px;
+  width: 120px; height: 120px;
+  background: radial-gradient(circle, rgba(37,99,235,0.12) 0%, transparent 70%);
+}
+.b-title { font-size: 18px; font-weight: 800; color: #fff; line-height: 1.2; letter-spacing: -0.5px; margin-bottom: 8px; }
+.b-title em { font-style: normal; background: linear-gradient(135deg, #3b82f6, #60a5fa); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.b-sub { font-size: 9px; color: #475569; line-height: 1.6; margin-bottom: 12px; max-width: 180px; }
+.b-btn { display: inline-block; font-size: 10px; font-weight: 600; color: #fff; background: #2563eb; padding: 7px 14px; border-radius: 7px; width: fit-content; margin-bottom: 12px; }
+.b-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.b-chip { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 5px; padding: 3px 7px; font-size: 8px; color: #475569; }
+
+.b-right {
+  flex: 1;
+  background: #f8fafc;
+  padding: 16px;
+  display: flex; flex-direction: column; gap: 6px; justify-content: center;
+}
+.b-feature {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
+  padding: 10px 12px;
+  display: flex; align-items: flex-start; gap: 8px;
+}
+.b-feature-icon {
+  width: 24px; height: 24px; border-radius: 6px;
+  background: #eff6ff; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px;
+}
+.b-feature-text .title { font-size: 10px; font-weight: 600; color: #0f172a; }
+.b-feature-text .sub { font-size: 8px; color: #94a3b8; }
+
+/* ─────────────────── OPTION C: Full Dark Minimal ─────────────────── */
+.c-screen {
+  border-radius: 8px; overflow: hidden;
+  height: 320px;
+  background: #050a14;
+  display: flex; flex-direction: column;
+}
+.c-nav {
+  padding: 10px 18px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.c-nav .brand { display: flex; align-items: center; gap: 7px; }
+.c-nav .logo { width: 22px; height: 22px; border-radius: 6px; background: #2563eb; display: flex; align-items: center; justify-content: center; }
+.c-nav .logo span { color: #fff; font-size: 10px; font-weight: 800; }
+.c-nav .name { font-size: 12px; font-weight: 700; color: #f1f5f9; }
+.c-nav .cta { font-size: 10px; font-weight: 600; color: #fff; background: #2563eb; padding: 4px 10px; border-radius: 6px; }
+
+.c-body {
+  flex: 1;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 16px;
+  text-align: center;
+  position: relative; overflow: hidden;
+}
+/* grid lines bg */
+.c-body::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(37,99,235,0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37,99,235,0.06) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+/* fade edges */
+.c-body::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at center, transparent 20%, #050a14 80%);
+}
+.c-content { position: relative; z-index: 1; }
+.c-eyebrow {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(37,99,235,0.1); border: 1px solid rgba(37,99,235,0.25);
+  color: #60a5fa; font-size: 9px; font-weight: 500;
+  padding: 3px 10px; border-radius: 20px; margin-bottom: 12px;
+}
+.c-title { font-size: 24px; font-weight: 800; color: #fff; line-height: 1.15; letter-spacing: -0.8px; margin-bottom: 8px; }
+.c-title .accent { color: #3b82f6; }
+.c-sub { font-size: 9px; color: #475569; max-width: 220px; margin: 0 auto 14px; line-height: 1.6; }
+.c-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600; color: #fff; background: #2563eb; padding: 7px 16px; border-radius: 7px; margin-bottom: 14px; }
+.c-tools { display: flex; gap: 5px; justify-content: center; }
+.c-tool { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 5px; padding: 3px 8px; font-size: 8px; color: #334155; }
+
+/* bottom note */
+.note {
+  margin-top: 20px;
+  background: #0f172a; border: 1px solid #1e293b;
+  border-radius: 10px; padding: 12px 16px;
+  font-size: 11px; color: #64748b; line-height: 1.6;
+}
+.note strong { color: #93c5fd; }
+</style>
+<script>
+function toggleSelect(card) {
+  document.querySelectorAll('.card').forEach(c => c.classList.remove('selected'));
+  card.classList.add('selected');
+  const choice = card.dataset.choice;
+  const text = card.querySelector('.card-name').textContent;
+  if (window.recordChoice) recordChoice(choice, text);
+}
+</script>
+</head>
+<body>
+
+<h1>Landing Page — Redesign Approaches</h1>
+<p class="subtitle">All options remove the redundant "Sign In" from the nav — one CTA only. Click to select.</p>
+
+<div class="grid">
+
+  <!-- A: Dark Full-Width Hero -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-header">
+      <div class="letter">A</div>
+      <div class="card-name">Dark Full-Width Hero</div>
+      <div class="badge blue">ByteCorp-inspired</div>
+    </div>
+    <div class="preview">
+      <div class="a-screen">
+        <div class="a-nav">
+          <div class="brand">
+            <div class="logo"><span>b</span></div>
+            <span class="name">ByteOps</span>
+          </div>
+          <div class="cta">Get Started →</div>
+        </div>
+        <div class="a-hero">
+          <div class="a-badge">⚡ AI-Powered Productivity</div>
+          <div class="a-title">Your tools.<br><span>One assistant.</span></div>
+          <div class="a-sub">Connect Gmail, Slack, GitHub & JIRA. Let AI handle the busywork.</div>
+          <div class="a-btns">
+            <div class="a-btn-primary">Get Started Free →</div>
+            <div class="a-btn-secondary">Sign In</div>
+          </div>
+          <div class="a-tools">
+            <div class="a-chip">Gmail</div>
+            <div class="a-chip">Slack</div>
+            <div class="a-chip">GitHub</div>
+            <div class="a-chip">JIRA</div>
+            <div class="a-chip">Trello</div>
+          </div>
+        </div>
+      </div>
+      <p style="font-size:11px;color:#475569;margin-top:10px;line-height:1.5">Full dark hero matching the sign-in page aesthetic. Single nav CTA. "Sign In" moves into the hero as a secondary text link. Glowing blue radial accent above headline.</p>
+    </div>
+  </div>
+
+  <!-- B: Dark/Light Split -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-header">
+      <div class="letter">B</div>
+      <div class="card-name">Dark Left + Feature Cards</div>
+      <div class="badge" style="background:#7c2d12;color:#fdba74">Bold</div>
+    </div>
+    <div class="preview">
+      <div class="b-screen">
+        <div class="b-nav">
+          <div class="brand">
+            <div class="logo"><span>b</span></div>
+            <span class="name">ByteOps</span>
+          </div>
+          <div class="cta">Get Started →</div>
+        </div>
+        <div class="b-body">
+          <div class="b-left">
+            <div class="b-title">One place.<br>All your <em>tools.</em></div>
+            <div class="b-sub">AI-powered assistant that connects your tools and gets work done.</div>
+            <div class="b-btn">Start for Free →</div>
+            <div class="b-chips">
+              <div class="b-chip">Gmail</div>
+              <div class="b-chip">Slack</div>
+              <div class="b-chip">GitHub</div>
+              <div class="b-chip">JIRA</div>
+            </div>
+          </div>
+          <div class="b-right">
+            <div class="b-feature">
+              <div class="b-feature-icon">⚙️</div>
+              <div class="b-feature-text"><div class="title">Cross-Tool Tasks</div><div class="sub">AI chains actions across your tools</div></div>
+            </div>
+            <div class="b-feature">
+              <div class="b-feature-icon">🧠</div>
+              <div class="b-feature-text"><div class="title">Intelligent Context</div><div class="sub">Remembers your emails, tickets, schedule</div></div>
+            </div>
+            <div class="b-feature">
+              <div class="b-feature-icon">🔒</div>
+              <div class="b-feature-text"><div class="title">Secure by Design</div><div class="sub">OAuth2 for every tool, encrypted</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p style="font-size:11px;color:#475569;margin-top:10px;line-height:1.5">Dark left with headline + CTA, light right with feature cards. Mirrors the split layout of the sign-in page. Familiar, structured, informative.</p>
+    </div>
+  </div>
+
+  <!-- C: Full Dark Grid -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-header">
+      <div class="letter">C</div>
+      <div class="card-name">Dark Grid — Minimal</div>
+      <div class="badge">⭐ Recommended</div>
+    </div>
+    <div class="preview">
+      <div class="c-screen">
+        <div class="c-nav">
+          <div class="brand">
+            <div class="logo"><span>b</span></div>
+            <span class="name">ByteOps</span>
+          </div>
+          <div class="cta">Get Started →</div>
+        </div>
+        <div class="c-body">
+          <div class="c-content">
+            <div class="c-eyebrow">⚡ AI-Powered Productivity</div>
+            <div class="c-title">Your tools.<br>One <span class="accent">smart</span> assistant.</div>
+            <div class="c-sub">Connect Gmail, Slack, GitHub & JIRA. Stop switching tabs. Start getting things done.</div>
+            <div class="c-btn">Get Started Free →</div>
+            <div class="c-tools">
+              <div class="c-tool">Gmail</div>
+              <div class="c-tool">Slack</div>
+              <div class="c-tool">GitHub</div>
+              <div class="c-tool">JIRA</div>
+              <div class="c-tool">Trello</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p style="font-size:11px;color:#475569;margin-top:10px;line-height:1.5">Full dark page with a subtle blue grid pattern fading to edges. Single focused headline. One CTA. "Sign In" removed entirely from nav — existing users click "Get Started" or go directly to /sign-in. Cleanest option.</p>
+    </div>
+  </div>
+
+</div>
+
+<div class="note">
+  <strong>Redundancy fix (all 3 options):</strong> The "Sign In" nav link is removed. New users → "Get Started" (→ sign-up). Returning users → click "Get Started" and Clerk shows the sign-in option, or go directly to <code>/sign-in</code>. Clean, unambiguous.
+</div>
+
+</body>
+</html>

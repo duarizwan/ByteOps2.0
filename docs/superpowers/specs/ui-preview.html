@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ByteOps UI Preview — Before vs After</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #0f172a; color: #f1f5f9; min-height: 100vh; }
+
+  /* ── Layout ── */
+  .page { max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
+  h1.page-title { font-size: 22px; font-weight: 700; color: #f8fafc; margin-bottom: 6px; }
+  .page-subtitle { font-size: 13px; color: #64748b; margin-bottom: 40px; }
+
+  .section { margin-bottom: 52px; }
+  .section-label { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #334155; margin-bottom: 18px; padding-bottom: 8px; border-bottom: 1px solid #1e293b; }
+
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .compare-col label { display: block; font-size: 11px; font-weight: 600; color: #475569; margin-bottom: 8px; text-transform: uppercase; letter-spacing: .08em; }
+
+  /* ── Panels ── */
+  .panel { background: #1e293b; border: 1px solid #334155; border-radius: 14px; overflow: hidden; }
+  .panel.before { opacity: .75; }
+
+  /* ── TOP BAR ── */
+  .topbar { height: 60px; background: rgba(30,41,59,0.95); border-bottom: 1px solid #334155; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; }
+
+  .logo-old { width: 36px; height: 36px; background: #fff; border: 1px solid #334155; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .logo-old span { font-size: 15px; font-weight: 700; color: #0f172a; }
+
+  .logo-new { width: 36px; height: 36px; background: linear-gradient(135deg, #1d4ed8, #3b82f6); border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: transform 150ms; }
+  .logo-new:hover { transform: scale(0.98); }
+  .logo-new svg { width: 16px; height: 16px; color: #fff; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  .brand { margin-left: 12px; }
+  .brand h1 { font-size: 17px; font-weight: 600; color: #f8fafc; line-height: 1.2; }
+  .brand p  { font-size: 11px; color: #64748b; }
+
+  .topbar-left { display: flex; align-items: center; }
+  .topbar-right { display: flex; align-items: center; gap: 10px; }
+  .icon-btn { width: 32px; height: 32px; background: transparent; border: none; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #94a3b8; }
+  .icon-btn:hover { background: #334155; }
+  .icon-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; }
+  .avatar { width: 34px; height: 34px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 10px; }
+
+  /* ── SIDEBAR TOOLS ── */
+  .sidebar { background: #0a0f1e; border-right: 1px solid #1e293b; border-radius: 12px; padding: 12px 8px; width: 220px; }
+  .sidebar-title { font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #334155; padding: 4px 8px 8px; }
+
+  .tool-row { display: flex; align-items: center; gap: 10px; padding: 10px 10px; border-radius: 10px; transition: background .15s; cursor: pointer; }
+  .tool-row:hover { background: #1e293b; }
+  .tool-icon { width: 16px; height: 16px; object-fit: contain; flex-shrink: 0; }
+  .tool-icon.placeholder { background: #334155; border-radius: 4px; }
+  .tool-name { font-size: 13px; font-weight: 500; color: #94a3b8; flex: 1; }
+  .tool-row.connected .tool-name { color: #e2e8f0; }
+
+  /* Dots */
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; transition: all .3s; }
+  .dot-off { background: #475569; }
+  .dot-on-old { background: #16a34a; }
+  .dot-on-new { background: #22c55e; box-shadow: 0 0 6px 2px rgba(34,197,94,0.45); }
+
+  /* ── CHAT ── */
+  .chat-wrap { padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+
+  .msg { display: flex; gap: 10px; }
+  .msg.user { flex-direction: row-reverse; }
+
+  .avatar-sm { width: 30px; height: 30px; border-radius: 10px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; margin-top: 2px; }
+  .avatar-sm.ai  { background: linear-gradient(135deg, #1d4ed8, #3b82f6); }
+  .avatar-sm.ai-b { font-size: 14px; font-weight: 800; color: #fff; line-height: 1; letter-spacing: -0.5px; }
+  .avatar-sm.usr { background: #3b82f6; }
+  .avatar-sm svg { width: 14px; height: 14px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; }
+
+  .bubble { padding: 12px 14px; border-radius: 16px; font-size: 13px; line-height: 1.55; max-width: 72%; }
+  .bubble.ai  { background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: #fff; }
+  .bubble.usr { background: #1e293b; color: #e2e8f0; border: 1px solid #334155; }
+
+  /* Animations */
+  @keyframes messageIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+  .msg.animated { animation: messageIn .25s ease-out both; }
+  .msg.animated:nth-child(2) { animation-delay: .12s; }
+  .msg.animated:nth-child(3) { animation-delay: .24s; }
+  .msg.animated:nth-child(4) { animation-delay: .36s; }
+
+  /* Typing dots */
+  .typing { display: flex; gap: 4px; align-items: center; height: 18px; }
+  .typing span { width: 6px; height: 6px; background: rgba(255,255,255,0.7); border-radius: 50%; }
+  /* BEFORE — all pulse together */
+  .typing.old span { animation: pulse 1.2s ease-in-out infinite; }
+  /* AFTER — staggered wave */
+  .typing.new span:nth-child(1) { animation: pulse 1.2s ease-in-out infinite; animation-delay: 0ms; }
+  .typing.new span:nth-child(2) { animation: pulse 1.2s ease-in-out infinite; animation-delay: 150ms; }
+  .typing.new span:nth-child(3) { animation: pulse 1.2s ease-in-out infinite; animation-delay: 300ms; }
+  @keyframes pulse { 0%,100%{opacity:.3; transform:scale(.8);} 50%{opacity:1; transform:scale(1);} }
+
+  /* Textarea */
+  .input-area { border-top: 1px solid #334155; padding: 12px; background: rgba(30,41,59,.5); border-radius: 0 0 14px 14px; display: flex; gap: 10px; align-items: flex-end; }
+  textarea { flex: 1; background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 10px 14px; font-size: 13px; color: #e2e8f0; resize: none; font-family: inherit; outline: none; min-height: 44px; max-height: 144px; overflow-y: auto; transition: border-color .15s; line-height: 1.5; }
+  textarea::placeholder { color: #475569; }
+  textarea:focus { border-color: #3b82f6; }
+  textarea.fixed-rows { height: 64px; }
+  .send-btn { width: 36px; height: 36px; background: linear-gradient(135deg, #1d4ed8, #3b82f6); border: none; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .send-btn svg { width: 14px; height: 14px; stroke: #fff; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ── CALLOUT ── */
+  .callout { font-size: 12px; color: #64748b; background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 8px 12px; margin-top: 10px; }
+  .callout strong { color: #94a3b8; }
+
+  /* ── GLOW DEMO ── */
+  .glow-demo { display: flex; align-items: center; gap: 24px; padding: 20px; }
+  .glow-item { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .glow-item span { font-size: 11px; color: #64748b; }
+
+  /* ── Badge chip ── */
+  .chip { display: inline-flex; align-items: center; gap: 6px; background: rgba(59,130,246,.1); border: 1px solid rgba(59,130,246,.2); border-radius: 20px; padding: 3px 10px; font-size: 11px; color: #93c5fd; margin-bottom: 14px; }
+  .chip svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+  /* Tab bar */
+  .tabs { display: flex; border-bottom: 1px solid #334155; }
+  .tab { display: flex; align-items: center; gap: 6px; padding: 10px 14px; font-size: 13px; font-weight: 500; color: #64748b; border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; transition: color .15s; }
+  .tab.active { color: #f1f5f9; border-bottom-color: #3b82f6; }
+  .tab svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .tab-label-old { display: none; }
+  .tab-label-old.xl-only { display: none; } /* hidden xl:inline — labels hidden below 1280 */
+  .tab-label-new { display: inline; } /* hidden lg:inline — shown at 1024+ */
+
+  /* full-width demo row */
+  .full-demo { background: #1e293b; border: 1px solid #334155; border-radius: 14px; overflow: hidden; margin-bottom: 12px; }
+
+  /* conversation list */
+  .conv-section { padding: 8px; }
+  .conv-list-old { max-height: 96px; overflow-y: auto; } /* max-h-24 as example */
+  .conv-list-new { flex: 1; overflow-y: auto; }
+  .conv-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; cursor: pointer; }
+  .conv-item:hover { background: #1e293b; }
+  .conv-item svg { width: 14px; height: 14px; stroke: #64748b; fill: none; stroke-width: 1.8; flex-shrink: 0; }
+  .conv-item p { font-size: 12px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="chip">
+    <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+    ByteOps UI Preview · Before vs After
+  </div>
+  <h1 class="page-title">UI Polish Changes</h1>
+  <p class="page-subtitle">Scroll through each section to see what's changing and why.</p>
+
+  <!-- ═══════════════════ 1. HEADER ═══════════════════ -->
+  <div class="section">
+    <div class="section-label">1 · Top Bar — Header Fix + Logo Upgrade</div>
+    <div class="compare">
+
+      <div>
+        <label>Before</label>
+        <div class="panel before">
+          <div class="topbar">
+            <div class="topbar-left">
+              <div class="logo-old"><span>b</span></div>
+              <div class="brand">
+                <h1>ByteOps</h1>
+                <p>AI Work Assistant · ByteOps</p> <!-- ← duplicate! -->
+              </div>
+            </div>
+            <div class="topbar-right">
+              <button class="icon-btn">
+                <svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+              </button>
+              <button class="icon-btn">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+              </button>
+              <div class="avatar"></div>
+            </div>
+          </div>
+        </div>
+        <div class="callout"><strong>Problem:</strong> "ByteOps" appears twice — in the heading and in the subtitle.</div>
+      </div>
+
+      <div>
+        <label>After</label>
+        <div class="panel">
+          <div class="topbar">
+            <div class="topbar-left">
+              <!-- New gradient logo -->
+              <div class="logo-new">
+                <svg viewBox="0 0 24 24"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+              </div>
+              <div class="brand">
+                <h1>ByteOps</h1>
+                <p>AI Work Assistant</p> <!-- ← clean -->
+              </div>
+            </div>
+            <div class="topbar-right">
+              <button class="icon-btn">
+                <svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+              </button>
+              <button class="icon-btn">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+              </button>
+              <div class="avatar"></div>
+            </div>
+          </div>
+        </div>
+        <div class="callout"><strong>Fix:</strong> Gradient blue icon (Sparkles) matches landing page. Subtitle trimmed. Logo has a hover press effect.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════ 2. TOOL GLOW ═══════════════════ -->
+  <div class="section">
+    <div class="section-label">2 · Sidebar — Connected Tool Indicator Glow</div>
+    <div class="compare">
+
+      <div>
+        <label>Before — flat dot, no distinction</label>
+        <div class="panel before" style="padding:12px 8px;">
+          <div class="sidebar-title">Tools</div>
+          <div class="tool-row connected">
+            <img class="tool-icon" src="https://upload.wikimedia.org/wikipedia/commons/7/7e/Gmail_icon_%282020%29.svg" alt="Gmail" onerror="this.className='tool-icon placeholder'"/>
+            <span class="tool-name">Gmail</span>
+            <div class="dot dot-on-old"></div>
+          </div>
+          <div class="tool-row connected">
+            <img class="tool-icon" src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" alt="Calendar" onerror="this.className='tool-icon placeholder'"/>
+            <span class="tool-name">Calendar</span>
+            <div class="dot dot-on-old"></div>
+          </div>
+          <div class="tool-row">
+            <div class="tool-icon placeholder"></div>
+            <span class="tool-name">Slack</span>
+            <div class="dot dot-off"></div>
+          </div>
+          <div class="tool-row">
+            <div class="tool-icon placeholder"></div>
+            <span class="tool-name">GitHub</span>
+            <div class="dot dot-off"></div>
+          </div>
+        </div>
+        <div class="callout"><strong>Problem:</strong> Connected and disconnected dots look nearly identical. Hard to tell what's active at a glance.</div>
+      </div>
+
+      <div>
+        <label>After — glowing green dot for connected</label>
+        <div class="panel" style="padding:12px 8px;">
+          <div class="sidebar-title">Tools</div>
+          <div class="tool-row connected">
+            <img class="tool-icon" src="https://upload.wikimedia.org/wikipedia/commons/7/7e/Gmail_icon_%282020%29.svg" alt="Gmail" onerror="this.className='tool-icon placeholder'"/>
+            <span class="tool-name">Gmail</span>
+            <div class="dot dot-on-new"></div>
+          </div>
+          <div class="tool-row connected">
+            <img class="tool-icon" src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" alt="Calendar" onerror="this.className='tool-icon placeholder'"/>
+            <span class="tool-name">Calendar</span>
+            <div class="dot dot-on-new"></div>
+          </div>
+          <div class="tool-row">
+            <div class="tool-icon placeholder"></div>
+            <span class="tool-name">Slack</span>
+            <div class="dot dot-off"></div>
+          </div>
+          <div class="tool-row">
+            <div class="tool-icon placeholder"></div>
+            <span class="tool-name">GitHub</span>
+            <div class="dot dot-off"></div>
+          </div>
+        </div>
+        <div class="callout"><strong>Fix:</strong> Connected tools glow green (<code>box-shadow: 0 0 6px 2px rgba(34,197,94,0.45)</code>). Transitions smoothly when state changes.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════ 3. CHAT ANIMATIONS ═══════════════════ -->
+  <div class="section">
+    <div class="section-label">3 · Chat — Message Animations + Typing Wave</div>
+    <div class="compare">
+
+      <div>
+        <label>Before — messages appear instantly, dots pulse together</label>
+        <div class="panel before">
+          <div class="chat-wrap">
+            <div class="msg">
+              <div class="avatar-sm ai ai-b">b</div>
+              <div class="bubble ai">Hello! I can help with Gmail, Calendar, GitHub and more.</div>
+            </div>
+            <div class="msg user">
+              <div class="avatar-sm usr">
+                <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              </div>
+              <div class="bubble usr">Summarize my emails from today</div>
+            </div>
+            <div class="msg">
+              <div class="avatar-sm ai ai-b">b</div>
+              <div class="bubble ai">
+                <div class="typing old">
+                  <span></span><span></span><span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <label>After — messages slide in, dots wave</label>
+        <div class="panel">
+          <div class="chat-wrap">
+            <div class="msg animated">
+              <div class="avatar-sm ai ai-b">b</div>
+              <div class="bubble ai">Hello! I can help with Gmail, Calendar, GitHub and more.</div>
+            </div>
+            <div class="msg user animated">
+              <div class="avatar-sm usr">
+                <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              </div>
+              <div class="bubble usr">Summarize my emails from today</div>
+            </div>
+            <div class="msg animated">
+              <div class="avatar-sm ai ai-b">b</div>
+              <div class="bubble ai">
+                <div class="typing new">
+                  <span></span><span></span><span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════ 4. TEXTAREA ═══════════════════ -->
+  <div class="section">
+    <div class="section-label">4 · Chat Input — Auto-Growing Textarea</div>
+    <div class="compare">
+
+      <div>
+        <label>Before — fixed 2 rows, scrolls when text overflows</label>
+        <div class="panel before">
+          <div class="input-area">
+            <textarea class="fixed-rows" placeholder="Type your message...">This is a longer message that would overflow the fixed height textarea and cause it to scroll internally instead of growing — which is frustrating when composing longer thoughts.</textarea>
+            <button class="send-btn">
+              <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="callout"><strong>Problem:</strong> Fixed height causes internal scroll. Text is hidden while typing.</div>
+      </div>
+
+      <div>
+        <label>After — grows as you type, up to 6 rows</label>
+        <div class="panel">
+          <div class="input-area">
+            <textarea
+              placeholder="Type your message..."
+              oninput="this.style.height='auto'; this.style.height=Math.min(this.scrollHeight,144)+'px'"
+            >This is a longer message that would overflow the fixed height textarea and cause it to scroll internally instead of growing — which is frustrating when composing longer thoughts.</textarea>
+            <button class="send-btn">
+              <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="callout"><strong>Fix:</strong> Textarea expands as you type. Capped at 6 rows (<code>max-h-36</code>), then scrolls. Resets on send.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════ 5. TAB LABELS ═══════════════════ -->
+  <div class="section">
+    <div class="section-label">5 · Context Panel — Tab Labels at Smaller Screens</div>
+    <div class="compare">
+
+      <div>
+        <label>Before — labels only at 1280px+ (xl)</label>
+        <div class="panel before">
+          <div class="tabs">
+            <div class="tab active">
+              <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              <span style="display:none">Workflows</span> <!-- hidden xl:inline -->
+            </div>
+            <div class="tab">
+              <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              <span style="display:none">Alerts</span> <!-- hidden xl:inline -->
+            </div>
+            <div class="tab">
+              <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+              <span style="display:none">Tasks</span> <!-- hidden xl:inline -->
+            </div>
+          </div>
+          <div style="padding:16px; font-size:12px; color:#475569;">Icons only — no labels. Needs guessing what each tab does.</div>
+        </div>
+      </div>
+
+      <div>
+        <label>After — labels visible at 1024px+ (lg)</label>
+        <div class="panel">
+          <div class="tabs">
+            <div class="tab active">
+              <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              <span>Workflows</span>
+            </div>
+            <div class="tab">
+              <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              <span>Alerts</span>
+              <span style="min-width:16px;height:16px;background:#3b82f6;color:#fff;border-radius:9999px;font-size:10px;display:flex;align-items:center;justify-content:center;padding:0 3px;">3</span>
+            </div>
+            <div class="tab">
+              <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+              <span>Tasks</span>
+            </div>
+          </div>
+          <div style="padding:16px; font-size:12px; color:#475569;">Clear labels visible. Easier navigation at typical laptop widths.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <p style="font-size:11px;color:#1e3a5f;text-align:center;padding:20px 0;">ByteOps UI Preview · 2026-05-29</p>
+</div>
+
+<script>
+  // Auto-init textarea heights on load
+  document.querySelectorAll('textarea').forEach(t => {
+    t.style.height = 'auto';
+    t.style.height = Math.min(t.scrollHeight, 144) + 'px';
+  });
+</script>
+</body>
+</html>

@@ -57,10 +57,8 @@ Guidelines:
 
 IMPORTANT — Scope:
 - You only handle Gmail. You have NO access to Google Calendar, GitHub, Slack, or any other service.
-- If the user asks about calendar events, scheduling, or any non-Gmail service, do NOT attempt
-  to help or apologise. Instead say exactly: "That sounds like a calendar/GitHub request — please
-  send a new message mentioning 'calendar' or 'GitHub' and the routing system will send it to
-  the right specialist."
+- If the user asks about anything outside Gmail, respond with one short sentence:
+  "I only handle Gmail — send a new message and the routing system will get you to the right tool."
 """ + RESPONSE_FORMAT
 
 
