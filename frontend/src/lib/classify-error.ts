@@ -1,11 +1,13 @@
 import type { ActionErrorCategory } from "./action-center-types";
 
 const AUTH_RE        = /401|403|token|expired|unauthorized/i;
-const TIMEOUT_RE     = /timeout|503|api error/i;
+const TIMEOUT_RE     = /timeout|timed out|503/i;
 const OAUTH_RE       = /oauth|not connected|not authenticated|integration.*required|reconnect/i;
 const NO_RESULTS_RE  = /no results|no emails|nothing found|empty result/i;
 const MCP_RE         = /mcp|tool.*unavailable|service.*unavailable|tool.*error/i;
 
+// backend_down is not detectable from error text — it is set directly in the
+// outer network catch block in chat-interface.tsx, not via this function.
 export function classifyError(error: string | null): ActionErrorCategory {
     if (!error) return "unknown";
     if (OAUTH_RE.test(error))       return "oauth_missing";
