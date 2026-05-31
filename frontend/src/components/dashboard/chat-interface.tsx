@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
 import { Send, User, Paperclip, Mic, Mail, ExternalLink, Loader2, HelpCircle, X, AlertCircle } from "lucide-react";
 import { useAuth } from "@clerk/nextjs";
@@ -11,6 +12,7 @@ import { useToolConnections } from "@/hooks/use-tool-connections";
 import { TOOL_CAPABILITIES } from "@/lib/tool-capabilities";
 import { api } from "@/lib/api";
 import { classifyError } from "@/lib/classify-error";
+import type { ActionErrorCategory } from "@/lib/action-center-types";
 
 /* ========================
    Types
@@ -22,7 +24,7 @@ interface Message {
     timestamp: Date;
     toolCalls?: ToolCall[];
     stage?: string;
-    errorClass?: string;
+    errorClass?: ActionErrorCategory;
 }
 
 interface ToolCall {
@@ -99,7 +101,7 @@ const STAGE_LABELS = {
 } as const;
 
 const CHAT_ERROR_MESSAGES: Record<string, { text: string; actionLabel?: string; actionPath?: string }> = {
-    oauth_missing:   { text: "Gmail isn't connected.",              actionLabel: "Go to Settings →", actionPath: "/settings" },
+    oauth_missing:   { text: "A required integration isn't connected.", actionLabel: "Go to Settings →", actionPath: "/settings" },
     no_results:      { text: "No results found for your request." },
     auth:            { text: "Authentication failed. Please sign out and sign back in." },
     timeout:         { text: "This took longer than expected. Please try again." },
@@ -769,8 +771,8 @@ export function ChatInterface({
                                                 </span>
                                             </div>
                                             {CHAT_ERROR_MESSAGES[message.errorClass]?.actionLabel && (
-                                                <a
-                                                    href={CHAT_ERROR_MESSAGES[message.errorClass].actionPath}
+                                                <Link
+                                                    href={CHAT_ERROR_MESSAGES[message.errorClass]!.actionPath!}
                                                     style={{
                                                         fontSize: 12,
                                                         color: "rgba(255,255,255,0.9)",
@@ -779,8 +781,8 @@ export function ChatInterface({
                                                         marginLeft: 22,
                                                     }}
                                                 >
-                                                    {CHAT_ERROR_MESSAGES[message.errorClass].actionLabel}
-                                                </a>
+                                                    {CHAT_ERROR_MESSAGES[message.errorClass]!.actionLabel}
+                                                </Link>
                                             )}
                                         </div>
                                     ) : message.content ? (
