@@ -10,14 +10,24 @@ export interface WorkflowItem {
     id: string;
     name: string;
     description: string | null;
-    status: "active" | "paused" | "running" | "failed";
+    status: "active" | "paused" | "running" | "failed" | "waiting_approval";
     trigger: Record<string, unknown>;
     actions: unknown[];
     trigger_label: string;
+    condition_summary: string;
     action_summary: string;
+    action_count: number;
+    approval_required?: boolean;
+    approval_summary?: string;
     last_run_at: string | null;
     next_run_at: string | null;
     last_error: string | null;
+    last_agent_run_id?: string | null;
+    last_run_status?: string | null;
+    last_run_summary?: string | null;
+    consecutive_failure_count?: number;
+    last_failure_at?: string | null;
+    needs_attention?: boolean;
     created_at?: string | null;
     updated_at?: string | null;
 }
@@ -43,6 +53,7 @@ export function useWorkflows() {
     const { getToken } = useAuth();
     const [workflows, setWorkflows] = useState<WorkflowItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const fetch_ = useCallback(async (silent = false) => {
@@ -52,9 +63,12 @@ export function useWorkflows() {
             if (res.ok) {
                 const data: WorkflowItem[] = await res.json();
                 setWorkflows(data);
+                setError(null);
+            } else {
+                setError(`Failed to load workflows (${res.status})`);
             }
         } catch {
-            // Keep stale data if the network blips.
+            setError("Could not reach server — showing last known data");
         } finally {
             if (!silent) setIsLoading(false);
         }
@@ -95,6 +109,7 @@ export function useWorkflows() {
     return {
         workflows,
         isLoading,
+        error,
         refresh,
         pause,
         resume,

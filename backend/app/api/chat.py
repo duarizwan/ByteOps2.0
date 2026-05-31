@@ -39,8 +39,25 @@ from app.agents.jira_agent import run_jira_agent
 from app.agents.dropbox_agent import run_dropbox_agent
 from app.services.sync.token_refresh import ensure_fresh_token
 from app.models.notification import Notification, NotificationPriority
+from app.models.agent_run import AgentRunStatus, AgentRunStepType
+from app.services.agent_planner import build_agent_plan
+from app.services.agent_runtime import (
+    complete_agent_run,
+    create_agent_run,
+    fail_agent_run,
+    record_agent_step,
+)
+from app.services.workflow_creation import (
+    build_workflow_draft,
+    create_workflow_from_prompt,
+    is_workflow_creation_request,
+    workflow_draft_response,
+    workflow_creation_response,
+)
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
+
+CHAT_STREAM_IDLE_TIMEOUT_SECONDS = 30
 
 _NOT_CONNECTED_PHRASES = ("please connect", "connect your", "connection has expired", "not connected")
 _PRIORITY_MAP = {
@@ -53,18 +70,15 @@ _TASK_CUES = (
     "action required",
     "asked you to",
     "assigned to you",
-    "approve",
-    "approval",
+    "your approval",
     "by friday",
     "by tomorrow",
-    "due",
     "follow up",
     "need you to",
     "needs your",
     "please review",
-    "reply",
-    "respond",
-    "review",
+    "waiting on you",
+    "waiting for you",
     "todo",
     "to-do",
 )
@@ -232,12 +246,14 @@ async def _run_chat(
             await db.refresh(conv)
 
         # ── 2. Persist user message ───────────────────────────────────────────
-        db.add(Message(
+        user_msg = Message(
             conversation_id=conv.id,
             role=MessageRole.USER,
             content=request.message,
-        ))
+        )
+        db.add(user_msg)
         await db.commit()
+        await db.refresh(user_msg)
 
         # ── 3. Load conversation history ──────────────────────────────────────
         result = await db.execute(
@@ -254,7 +270,7 @@ async def _run_chat(
         history = history[-40:]
 
         # ── 4. Route based on intent ──────────────────────────────────────────
-        intent = detect_intent(request.message, history)
+        intent = "workflow" if is_workflow_creation_request(request.message) else detect_intent(request.message, history)
         full_text = ""
 
         # Query ALL connected tools once (used for routing + dynamic prompt)
@@ -266,8 +282,45 @@ async def _run_chat(
         )
         all_connections = all_conns_result.scalars().all()
         connected_tool_names = [conn.tool_type.value for conn in all_connections]
+        plan = build_agent_plan(
+            user_message=request.message,
+            intent=intent,
+            connected_tools=connected_tool_names,
+        )
+        agent_run = await create_agent_run(
+            db,
+            user_id=current_user.id,
+            conversation_id=conv.id,
+            user_message_id=user_msg.id,
+            intent=intent,
+            plan=plan,
+        )
+        await record_agent_step(
+            db,
+            run_id=agent_run.id,
+            step_type=AgentRunStepType.ROUTE,
+            name="intent_routing",
+            input={"message": request.message},
+            output={"intent": intent, "connected_tools": connected_tool_names},
+        )
+        agent_run.status = AgentRunStatus.RUNNING
+        await db.commit()
 
-        if intent == "gmail":
+        if intent == "workflow":
+            draft = build_workflow_draft(request.message, connected_tool_names)
+            full_text = workflow_draft_response(draft)
+            # Chat-created workflows always pause for user review before saving.
+            # The workflow_draft event carries all display content; no plain delta needed.
+            await queue.put(("workflow_draft", {"run_id": str(agent_run.id), **draft}))
+            await record_agent_step(
+                db,
+                run_id=agent_run.id,
+                step_type=AgentRunStepType.FINAL,
+                name="workflow_draft_needs_review",
+                input={"message": request.message},
+                output=draft,
+            )
+        elif intent == "gmail":
             gmail_conn = next(
                 (c for c in all_connections if c.tool_type == ToolType.GMAIL), None
             )
@@ -292,6 +345,8 @@ async def _run_chat(
                         history=history,
                         tool_connection=gmail_conn,
                         queue=queue,
+                        run_id=agent_run.id,
+                        db=db,
                     )
                     await _save_activity_notification(db, current_user.id, "gmail", request.message, full_text)
         elif intent == "calendar":
@@ -318,6 +373,8 @@ async def _run_chat(
                         history=history,
                         tool_connection=calendar_conn,
                         queue=queue,
+                        run_id=agent_run.id,
+                        db=db,
                     )
                     await _save_activity_notification(db, current_user.id, "calendar", request.message, full_text)
         elif intent == "github":
@@ -336,6 +393,8 @@ async def _run_chat(
                     history=history,
                     tool_connection=github_conn,
                     queue=queue,
+                    run_id=agent_run.id,
+                    db=db,
                 )
                 await _save_activity_notification(db, current_user.id, "github", request.message, full_text)
         elif intent == "slack":
@@ -354,6 +413,8 @@ async def _run_chat(
                     history=history,
                     tool_connection=slack_conn,
                     queue=queue,
+                    run_id=agent_run.id,
+                    db=db,
                 )
                 await _save_activity_notification(db, current_user.id, "slack", request.message, full_text)
         elif intent == "jira":
@@ -380,6 +441,8 @@ async def _run_chat(
                         history=history,
                         tool_connection=jira_conn,
                         queue=queue,
+                        run_id=agent_run.id,
+                        db=db,
                     )
                     await _save_activity_notification(db, current_user.id, "jira", request.message, full_text)
         elif intent == "dropbox":
@@ -398,6 +461,8 @@ async def _run_chat(
                     history=history,
                     tool_connection=dropbox_conn,
                     queue=queue,
+                    run_id=agent_run.id,
+                    db=db,
                 )
                 await _save_activity_notification(db, current_user.id, "dropbox", request.message, full_text)
         else:
@@ -412,16 +477,24 @@ async def _run_chat(
             content=full_text,
         ))
         await db.commit()
+        await complete_agent_run(db, agent_run, full_text)
 
         await queue.put(("done", full_text, str(conv.id)))
 
     except Exception as exc:  # noqa: BLE001
         msg = str(exc)
-        # Friendly message for Claude rate-limit errors
+        if "agent_run" in locals():
+            await fail_agent_run(db, agent_run, msg)
         if "429" in msg or "rate_limit" in msg.lower() or "quota" in msg.lower():
             await queue.put((
                 "error",
                 "The AI is rate-limited right now. Please wait 15–30 seconds and try again."
+            ))
+        elif "401" in msg or "authentication_error" in msg.lower() or "invalid x-api-key" in msg.lower() or "invalid_api_key" in msg.lower():
+            await queue.put((
+                "error",
+                "AI provider authentication failed. Your API key is invalid or expired — "
+                "update CLAUDE_API_KEY (or GEMINI_API_KEY / GROQ_API_KEY) in backend/.env and restart the server."
             ))
         else:
             await queue.put(("error", msg))
@@ -440,10 +513,36 @@ async def chat_handler(
     queue: asyncio.Queue = asyncio.Queue()
 
     async def sse_stream() -> AsyncGenerator[str, None]:
-        task = asyncio.create_task(_run_chat(request, current_user, db, queue))
+        chat_task = asyncio.create_task(_run_chat(request, current_user, db, queue))
         try:
             while True:
-                item = await queue.get()
+                queue_task = asyncio.create_task(queue.get())
+                try:
+                    done, pending = await asyncio.wait(
+                        {queue_task, chat_task},
+                        timeout=CHAT_STREAM_IDLE_TIMEOUT_SECONDS,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                except asyncio.TimeoutError:
+                    yield _sse("error", "Chat request timed out before ByteOps could respond.")
+                    break
+
+                for pending_task in pending:
+                    if pending_task is queue_task:
+                        pending_task.cancel()
+
+                if not done:
+                    yield _sse("error", "Chat request timed out before ByteOps could respond.")
+                    break
+
+                if chat_task in done and queue_task not in done:
+                    if chat_task.exception():
+                        yield _sse("error", "Chat request failed before ByteOps could respond.")
+                    else:
+                        yield _sse("error", "Chat request ended before ByteOps could respond.")
+                    break
+
+                item = queue_task.result()
 
                 if isinstance(item, str):
                     # Plain string → streaming text delta
@@ -465,12 +564,20 @@ async def chat_handler(
                             yield _sse("tool_call_start", "", tool=tool_name, args=args_json)
                         case ("tool_call_result", tool_name, result_text):
                             yield _sse("tool_call_result", result_text, tool=tool_name)
+                        case ("approval_required", approval_data):
+                            import json as _json
+                            approval_dict = dict(approval_data) if isinstance(approval_data, dict) else {}
+                            summary = approval_dict.pop("summary", "")
+                            yield _sse("approval_required", summary, **approval_dict)
+                        case ("workflow_draft", draft_data):
+                            draft_dict = dict(draft_data) if isinstance(draft_data, dict) else {}
+                            yield _sse("workflow_draft", "", **draft_dict)
                         case _:
                             # Unknown tuple — ignore
                             pass
 
         finally:
-            task.cancel()
+            chat_task.cancel()
 
     return StreamingResponse(sse_stream(), media_type="text/event-stream")
 

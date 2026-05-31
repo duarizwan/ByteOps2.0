@@ -147,7 +147,7 @@ function GraphCanvasInner({ selectedRunId, onLoad }: GraphCanvasProps) {
         setEdges(
             derivedEdges.map((e) => ({
                 ...e,
-                markerEnd: { type: MarkerType.ArrowClosed, color: e.style.stroke },
+                markerEnd: { type: MarkerType.ArrowClosed, color: e.style?.stroke },
             }))
         );
         setSelectedNode(null);

@@ -72,6 +72,8 @@ interface ChatInterfaceProps {
     conversationId: string | null;
     /** Called with the new conversation ID when the first message creates a thread. */
     onConversationCreated: (id: string) => void;
+    /** Called after a workflow draft is approved and persisted. */
+    onWorkflowSaved?: () => void;
     /** Pre-fill the input with this message (from the Ask AI notification bridge). */
     initialMessage?: string | null;
     /** Called after initialMessage has been consumed and input set, so parent can clear it. */
@@ -119,6 +121,41 @@ const SUPPORTED_WORKFLOW_ACTIONS: WorkflowDraftAction[] = [
     { tool: "dropbox", label: "Review Dropbox files" },
     { tool: "byteops", label: "List urgent tasks" },
 ];
+
+function cleanDraftText(value: unknown): string {
+    return String(value ?? "")
+        .replace(/[*|\-]/g, " ")
+        .replace(/\s+([.,!?;:])/g, "$1")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+function workflowDraftAssistantContent(event: {
+    name?: unknown;
+    trigger?: { label?: unknown };
+    actions?: unknown[];
+}): string {
+    const name = cleanDraftText(event.name) || "Workflow";
+    const trigger = cleanDraftText(event.trigger?.label) || "Manual run";
+    const actionLabels = Array.isArray(event.actions)
+        ? event.actions
+            .map((action) => {
+                if (action && typeof action === "object") {
+                    const label = (action as Record<string, unknown>).label;
+                    const tool = (action as Record<string, unknown>).tool;
+                    return cleanDraftText(label || tool);
+                }
+                return cleanDraftText(action);
+            })
+            .filter(Boolean)
+        : [];
+    const actions = actionLabels.length > 0 ? actionLabels.join(", ") : "No actions extracted";
+    return `Workflow draft ready for review. Name: ${name}. Trigger: ${trigger}. Actions: ${actions}.`;
+}
+
+function isWorkflowDraftPlaceholder(content: string): boolean {
+    return content.startsWith("Workflow draft ready for review.");
+}
 
 /* ========================
    Utility Components
@@ -320,6 +357,7 @@ function WorkflowDraftCard({ draft, onDraftChange, onApprove, onDismiss, isAppro
 export function ChatInterface({
     conversationId,
     onConversationCreated,
+    onWorkflowSaved,
     initialMessage,
     onInitialMessageConsumed,
 }: ChatInterfaceProps) {
@@ -332,6 +370,7 @@ export function ChatInterface({
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const streamAbortRef = useRef<AbortController | null>(null);
     const [attachedFile, setAttachedFile] = useState<File | null>(null);
     const [showHelp, setShowHelp] = useState(false);
     const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
@@ -350,18 +389,24 @@ export function ChatInterface({
         scrollToBottom();
     }, [messages]);
 
-    // ── Ask AI bridge: pre-fill input from notification panel ──────────────────
+    // ── Ask AI bridge: auto-send message from workflow/notification panel ────────
     useEffect(() => {
-        if (initialMessage) {
-            setInput(initialMessage);
-            onInitialMessageConsumed?.();
-            // Focus textarea so user can immediately edit/send
-            setTimeout(() => textareaRef.current?.focus(), 50);
-        }
-    }, [initialMessage, onInitialMessageConsumed]);
+        // Wait until any in-flight stream settles before attempting the auto-send.
+        // isTyping in deps ensures this effect re-runs when the stream finishes.
+        if (!initialMessage || isTyping) return;
+        handleSend(initialMessage);
+        // Consume only after handleSend is admitted past its isTyping guard —
+        // prevents permanent message loss when the send would have been dropped.
+        onInitialMessageConsumed?.();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialMessage, isTyping, onInitialMessageConsumed]);
 
     // ── Load conversation history when conversationId changes ─────────────────
     useEffect(() => {
+        // Cancel any SSE stream from the previous conversation
+        streamAbortRef.current?.abort();
+        streamAbortRef.current = null;
+
         if (!conversationId) {
             // null = new chat: reset to welcome message
             setMessages([WELCOME_MESSAGE]);
@@ -385,6 +430,8 @@ export function ChatInterface({
                 setMessages(loaded.length > 0 ? loaded : [WELCOME_MESSAGE]);
             }
             setIsLoadingHistory(false);
+        }).catch(() => {
+            if (!cancelled) setIsLoadingHistory(false);
         });
 
         return () => { cancelled = true; };
@@ -418,6 +465,7 @@ export function ChatInterface({
         }
         setAttachedFile(null);
         setIsTyping(true);
+        let chatTimeoutId: ReturnType<typeof window.setTimeout> | null = null;
 
         const userMessage: Message = {
             id: Date.now().toString(),
@@ -436,10 +484,24 @@ export function ChatInterface({
 
         try {
             const token = await getToken();
+            // Cancel any previous in-flight stream and register this one
+            streamAbortRef.current?.abort();
+            const chatTimeoutController = new AbortController();
+            streamAbortRef.current = chatTimeoutController;
+            const resetChatTimeout = () => {
+                if (chatTimeoutId) {
+                    window.clearTimeout(chatTimeoutId);
+                }
+                chatTimeoutId = window.setTimeout(() => {
+                    chatTimeoutController.abort();
+                }, 45000);
+            };
+            resetChatTimeout();
 
             const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
             const response = await fetch(`${API_BASE}/api/chat`, {
                 method: "POST",
+                signal: chatTimeoutController.signal,
                 headers: {
                     "Content-Type": "application/json",
                     Authorization: `Bearer ${token}`,
@@ -450,25 +512,36 @@ export function ChatInterface({
                 }),
             });
 
+            if (!response.ok) {
+                throw new Error(`Chat request failed: ${response.status}`);
+            }
             if (!response.body) throw new Error("No response body");
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
+            let sseBuffer = "";
+            let sawTerminalEvent = false;
 
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
 
-                const chunk = decoder.decode(value, { stream: true });
-                const lines = chunk.split("\n");
+                sseBuffer += decoder.decode(value, { stream: true });
+                const records = sseBuffer.split("\n\n");
+                sseBuffer = records.pop() ?? "";
 
-                for (const line of lines) {
-                    if (line.startsWith("data: ")) {
-                        const dataStr = line.slice(6);
+                for (const record of records) {
+                    const dataLine = record.split("\n").find((line) => line.startsWith("data: "));
+                    if (dataLine) {
+                        const dataStr = dataLine.slice(6);
                         if (!dataStr) continue;
 
                         try {
                             const event = JSON.parse(dataStr);
+                            resetChatTimeout();
+                            if (event.type === "done" || event.type === "error") {
+                                sawTerminalEvent = true;
+                            }
 
                             // Capture conversation_id from the done event
                             if (event.type === "done" && event.conversation_id) {
@@ -507,7 +580,14 @@ export function ChatInterface({
                                     let newStage = msg.stage;
 
                                     if ((event.type === "delta" || event.type === "text") && event.content) {
-                                        newContent += event.content;
+                                        if (
+                                            isWorkflowDraftPlaceholder(newContent) &&
+                                            event.content.includes("Draft workflow ready for review.")
+                                        ) {
+                                            newContent = event.content;
+                                        } else {
+                                            newContent += event.content;
+                                        }
                                         newStage = undefined; // content flowing — clear stage label
                                     } else if (event.type === "tool_call_start") {
                                         newStage = STAGE_LABELS.routing;
@@ -517,15 +597,17 @@ export function ChatInterface({
                                             status: "pending",
                                         });
                                     } else if (event.type === "tool_call_result") {
-                                        const tc = newToolCalls.find(
+                                        const idx = newToolCalls.findIndex(
                                             (t) => t.tool === event.tool && t.status === "pending"
                                         );
-                                        if (tc) {
-                                            tc.status = "done";
-                                            tc.result = event.content;
+                                        if (idx !== -1) {
+                                            newToolCalls[idx] = { ...newToolCalls[idx], status: "done", result: event.content };
                                         }
                                     } else if (event.type === "approval_required") {
                                         newStage = STAGE_LABELS.awaiting;
+                                    } else if (event.type === "workflow_draft") {
+                                        newContent = workflowDraftAssistantContent(event);
+                                        newStage = undefined;
                                     } else if (event.type === "done") {
                                         newStage = undefined;
                                     } else if (event.type === "error") {
@@ -542,55 +624,82 @@ export function ChatInterface({
                     }
                 }
             }
+            if (!sawTerminalEvent) {
+                console.warn("Chat stream ended without a terminal event");
+                setMessages((prev) =>
+                    prev.map((msg) =>
+                        msg.id === assistantMessageId && !msg.content
+                            ? { ...msg, stage: undefined, errorClass: "timeout" }
+                            : msg.id === assistantMessageId
+                                ? { ...msg, stage: undefined }
+                                : msg
+                    )
+                );
+            }
         } catch (error) {
             console.error("Chat error:", error);
+            const isAbortError = error instanceof Error && error.name === "AbortError";
             setMessages((prev) =>
                 prev.map((msg) =>
                     msg.id === assistantMessageId
-                        ? { ...msg, stage: undefined, errorClass: "backend_down" }
+                        ? { ...msg, stage: undefined, errorClass: isAbortError ? "timeout" : "backend_down" }
                         : msg
                 )
             );
         } finally {
+            if (chatTimeoutId) {
+                window.clearTimeout(chatTimeoutId);
+            }
+            streamAbortRef.current = null;
             setIsTyping(false);
         }
     };
 
     const handleApprove = async () => {
         if (!pendingApproval) return;
-        const token = await getToken();
-        const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-        const response = await fetch(apiBase + "/api/agent-runs/" + pendingApproval.run_id + "/approve", {
-            method: "POST",
-            headers: { Authorization: "Bearer " + token },
-        });
-        if (!response.ok) {
-            throw new Error("Approval failed");
+        try {
+            const token = await getToken();
+            const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            const response = await fetch(apiBase + "/api/agent-runs/" + pendingApproval.run_id + "/approve", {
+                method: "POST",
+                headers: { Authorization: "Bearer " + token },
+            });
+            if (!response.ok) throw new Error("Approval failed");
+            setPendingApproval(null);
+            setMessages((prev) => [
+                ...prev,
+                {
+                    id: Date.now().toString(),
+                    role: "assistant",
+                    content: `Action approved. ${pendingApproval.tool} → ${pendingApproval.action} is now running.`,
+                    timestamp: new Date(),
+                },
+            ]);
+        } catch {
+            setMessages((prev) => [
+                ...prev,
+                { id: Date.now().toString(), role: "assistant", content: "", timestamp: new Date(), errorClass: "unknown" },
+            ]);
         }
-        setPendingApproval(null);
-        setMessages((prev) => [
-            ...prev,
-            {
-                id: Date.now().toString(),
-                role: "assistant",
-                content: `Action approved. ${pendingApproval.tool} → ${pendingApproval.action} is now running.`,
-                timestamp: new Date(),
-            },
-        ]);
     };
 
     const handleReject = async () => {
         if (!pendingApproval) return;
-        const token = await getToken();
-        const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-        const response = await fetch(apiBase + "/api/agent-runs/" + pendingApproval.run_id + "/reject", {
-            method: "POST",
-            headers: { Authorization: "Bearer " + token },
-        });
-        if (!response.ok) {
-            throw new Error("Rejection failed");
+        try {
+            const token = await getToken();
+            const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            const response = await fetch(apiBase + "/api/agent-runs/" + pendingApproval.run_id + "/reject", {
+                method: "POST",
+                headers: { Authorization: "Bearer " + token },
+            });
+            if (!response.ok) throw new Error("Rejection failed");
+            setPendingApproval(null);
+        } catch {
+            setMessages((prev) => [
+                ...prev,
+                { id: Date.now().toString(), role: "assistant", content: "", timestamp: new Date(), errorClass: "unknown" },
+            ]);
         }
-        setPendingApproval(null);
     };
 
     const handleApproveWorkflowDraft = async () => {
@@ -598,9 +707,10 @@ export function ChatInterface({
         setIsApprovingWorkflowDraft(true);
         setWorkflowDraftError(null);
         try {
+            const token = await getToken();
             const result = await api<{ workflow_status: string }>(
                 `/api/agent-runs/${pendingWorkflowDraft.run_id}/approve-workflow-draft`,
-                { method: "POST", body: JSON.stringify({ draft: pendingWorkflowDraft }) },
+                { method: "POST", body: JSON.stringify({ draft: pendingWorkflowDraft }), token },
             );
             const statusLabel = result.workflow_status === "paused" ? "Paused" : "Active";
             setPendingWorkflowDraft(null);
@@ -613,6 +723,7 @@ export function ChatInterface({
                     timestamp: new Date(),
                 },
             ]);
+            onWorkflowSaved?.();
         } catch (e: unknown) {
             setWorkflowDraftError((e instanceof Error ? e.message : null) ?? "Could not save workflow — please try again.");
         } finally {

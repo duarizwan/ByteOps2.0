@@ -7,6 +7,8 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 interface FetchOptions extends RequestInit {
     /** If true, include Clerk session token in Authorization header. */
     auth?: boolean;
+    /** Pre-resolved token to use instead of calling window.Clerk (avoids first-render race). */
+    token?: string | null;
 }
 
 async function _authHeaders(): Promise<Record<string, string>> {
@@ -30,12 +32,17 @@ export async function api<T = unknown>(
     path: string,
     options: FetchOptions = {},
 ): Promise<T> {
-    const { auth = true, headers: customHeaders, ...rest } = options;
+    const { auth = true, token, headers: customHeaders, ...rest } = options;
+
+    let authHeaders: Record<string, string> = {};
+    if (auth) {
+        authHeaders = token ? { Authorization: `Bearer ${token}` } : await _authHeaders();
+    }
 
     const headers: Record<string, string> = {
         "Content-Type": "application/json",
         ...(customHeaders as Record<string, string>),
-        ...(auth ? await _authHeaders() : {}),
+        ...authHeaders,
     };
 
     const response = await fetch(`${API_BASE}${path}`, { headers, ...rest });

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useCallback, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Zap } from "lucide-react";
 import { useAgentRuns, type AgentRun } from "@/hooks/use-agent-runs";
 import type { FilterTab, CategorizedRuns } from "@/lib/action-center-types";
@@ -22,7 +22,7 @@ const WRITE_VERBS = new Set([
 
 function hasCrudOperation(run: AgentRun): boolean {
     if (run.status === "waiting_approval") return true;
-    return run.steps.some((step) => {
+    return (run.steps ?? []).some((step) => {
         if (step.step_type !== "tool_call") return false;
         return WRITE_VERBS.has(step.name.split("_")[0].toLowerCase());
     });
@@ -32,7 +32,7 @@ function categorize(runs: AgentRun[], tab: FilterTab, dismissedIds: Set<string>)
     const visible = runs.filter((r) => !dismissedIds.has(r.id));
     const pending = visible.filter((r) => r.status === "waiting_approval");
     const failed  = visible.filter((r) => r.status === "failed");
-    const history = visible.filter((r) => r.status === "completed" || r.status === "cancelled");
+    const history = visible.filter((r) => r.status === "completed" || r.status === "cancelled" || r.status === "running" || r.status === "planning");
 
     if (tab === "pending") return { pending, failed: [], history: [] };
     if (tab === "failed")  return { pending: [], failed, history: [] };
@@ -121,11 +121,17 @@ function ActionCardSkeleton() {
 
 export function ActionCenter() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { runs, isLoading } = useAgentRuns();
 
     const [filterTab, setFilterTab]   = useState<FilterTab>("all");
     const [traceRunId, setTraceRunId] = useState<string | null>(null);
     const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+    const traceParam = searchParams.get("trace");
+
+    useEffect(() => {
+        if (traceParam) setTraceRunId(traceParam);
+    }, [traceParam]);
 
     const visibleRuns = runs.filter(hasCrudOperation);
     const { pending, failed, history } = categorize(visibleRuns, filterTab, dismissedIds);
@@ -135,7 +141,7 @@ export function ActionCenter() {
         setDismissedIds((prev) => new Set([...prev, id]));
     }, []);
 
-    const traceRun = traceRunId ? visibleRuns.find((r) => r.id === traceRunId) ?? null : null;
+    const traceRun = traceRunId ? runs.find((r) => r.id === traceRunId) ?? null : null;
 
     return (
         <>
@@ -205,8 +211,8 @@ export function ActionCenter() {
                 flexDirection: "column",
                 gap: 16,
             }}>
-                {/* Skeleton loading state */}
-                {isLoading && (
+                {/* Skeleton loading state — only on initial empty load */}
+                {isLoading && runs.length === 0 && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                         <ActionCardSkeleton />
                         <ActionCardSkeleton />
@@ -231,7 +237,7 @@ export function ActionCenter() {
                     </section>
                 )}
 
-                {filterTab === "pending" && pending.length === 0 && (
+                {filterTab === "pending" && pending.length === 0 && !isLoading && (
                     <p style={{ fontSize: 13, color: "var(--muted-foreground)", textAlign: "center", marginTop: 40 }}>
                         No pending approvals right now.
                     </p>
@@ -249,7 +255,7 @@ export function ActionCenter() {
                     </section>
                 )}
 
-                {filterTab === "failed" && failed.length === 0 && (
+                {filterTab === "failed" && failed.length === 0 && !isLoading && (
                     <p style={{ fontSize: 13, color: "var(--muted-foreground)", textAlign: "center", marginTop: 40 }}>
                         No failed actions.
                     </p>
