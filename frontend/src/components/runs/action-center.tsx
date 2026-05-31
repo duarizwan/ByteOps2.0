@@ -86,7 +86,7 @@ function SectionHeader({ label, color }: { label: string; color: string }) {
 
 function ActionCardSkeleton() {
     return (
-        <div style={{
+        <div className="animate-pulse" style={{
             display: "flex",
             borderRadius: 8,
             overflow: "hidden",
@@ -95,23 +95,22 @@ function ActionCardSkeleton() {
             opacity: 0.6,
         }}>
             {/* Status bar placeholder */}
-            <div style={{ width: 3, flexShrink: 0, background: "var(--accent)" }} />
+            <div style={{ width: 3, flexShrink: 0, background: "var(--border)" }} />
             {/* Body */}
-            <div style={{ flex: 1, padding: "10px 12px", display: "flex", gap: 10, alignItems: "flex-start" }}
-                 className="animate-pulse">
+            <div style={{ flex: 1, minWidth: 0, padding: "10px 12px", display: "flex", gap: 10, alignItems: "flex-start" }}>
                 {/* Platform badge placeholder */}
-                <div style={{ width: 44, height: 18, borderRadius: 5, background: "var(--accent)", flexShrink: 0, marginTop: 1 }} />
+                <div style={{ width: 44, height: 18, borderRadius: 5, background: "var(--border)", flexShrink: 0, marginTop: 1 }} />
                 {/* Text placeholder */}
                 <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
-                    <div style={{ height: 10, borderRadius: 4, background: "var(--accent)", width: "60%" }} />
-                    <div style={{ height: 10, borderRadius: 4, background: "var(--accent)", width: "80%" }} />
-                    <div style={{ height: 9,  borderRadius: 4, background: "var(--accent)", width: "40%" }} />
+                    <div style={{ height: 10, borderRadius: 4, background: "var(--border)", width: "60%" }} />
+                    <div style={{ height: 10, borderRadius: 4, background: "var(--border)", width: "80%" }} />
+                    <div style={{ height: 9,  borderRadius: 4, background: "var(--border)", width: "40%" }} />
                 </div>
                 {/* Right column placeholder */}
                 <div style={{ width: 36, display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
-                    <div style={{ width: 18, height: 18, borderRadius: 4, background: "var(--accent)" }} />
-                    <div style={{ width: 24, height: 8,  borderRadius: 4, background: "var(--accent)" }} />
-                    <div style={{ width: 36, height: 18, borderRadius: 5, background: "var(--accent)" }} />
+                    <div style={{ width: 18, height: 18, borderRadius: 4, background: "var(--border)" }} />
+                    <div style={{ width: 24, height: 8,  borderRadius: 4, background: "var(--border)" }} />
+                    <div style={{ width: 36, height: 18, borderRadius: 5, background: "var(--border)" }} />
                 </div>
             </div>
         </div>
