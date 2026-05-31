@@ -534,7 +534,7 @@ export function ChatInterface({
             setMessages((prev) =>
                 prev.map((msg) =>
                     msg.id === assistantMessageId
-                        ? { ...msg, content: msg.content + "\n\n*Error communicating with AI.*" }
+                        ? { ...msg, content: msg.content + "\n\n*Error communicating with AI.*", stage: undefined }
                         : msg
                 )
             );
