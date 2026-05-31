@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ArrowLeft, Zap } from "lucide-react";
 import type { AgentRun } from "@/hooks/use-agent-runs";
 import { summarizeAction } from "@/lib/summarize-action";
@@ -13,6 +13,7 @@ interface TraceDrawerProps {
 
 export function TraceDrawer({ run, onClose }: TraceDrawerProps) {
     const [isGraphReady, setIsGraphReady] = useState(false);
+    const handleGraphLoad = useCallback(() => setIsGraphReady(true), []);
 
     useEffect(() => {
         setIsGraphReady(false);
@@ -121,7 +122,7 @@ export function TraceDrawer({ run, onClose }: TraceDrawerProps) {
                 )}
                 <GraphCanvas
                     selectedRunId={run.id}
-                    onLoad={() => setIsGraphReady(true)}
+                    onLoad={handleGraphLoad}
                 />
             </div>
         </div>
