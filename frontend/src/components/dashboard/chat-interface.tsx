@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, User, Paperclip, Mic, Mail, ExternalLink, Loader2, HelpCircle, X } from "lucide-react";
+import { Send, User, Paperclip, Mic, Mail, ExternalLink, Loader2, HelpCircle, X, AlertCircle } from "lucide-react";
 import { useAuth } from "@clerk/nextjs";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
@@ -10,6 +10,7 @@ import { ByteOpsLogoMark } from "@/lib/brand-icons";
 import { useToolConnections } from "@/hooks/use-tool-connections";
 import { TOOL_CAPABILITIES } from "@/lib/tool-capabilities";
 import { api } from "@/lib/api";
+import { classifyError } from "@/lib/classify-error";
 
 /* ========================
    Types
@@ -96,6 +97,16 @@ const STAGE_LABELS = {
     awaiting:       "Waiting for approval…",
     finalizing:     "Finalizing response…",
 } as const;
+
+const CHAT_ERROR_MESSAGES: Record<string, { text: string; actionLabel?: string; actionPath?: string }> = {
+    oauth_missing:   { text: "Gmail isn't connected.",              actionLabel: "Go to Settings →", actionPath: "/settings" },
+    no_results:      { text: "No results found for your request." },
+    auth:            { text: "Authentication failed. Please sign out and sign back in." },
+    timeout:         { text: "This took longer than expected. Please try again." },
+    mcp_unavailable: { text: "A service is temporarily unavailable. Please try again." },
+    backend_down:    { text: "Can't reach ByteOps. Check your connection and retry." },
+    unknown:         { text: "Something went wrong. Please try again." },
+};
 
 const SUPPORTED_WORKFLOW_ACTIONS: WorkflowDraftAction[] = [
     { tool: "gmail", label: "Review Gmail activity" },
@@ -516,8 +527,8 @@ export function ChatInterface({
                                     } else if (event.type === "done") {
                                         newStage = undefined;
                                     } else if (event.type === "error") {
-                                        newContent = `⚠️ ${event.content}`;
                                         newStage = undefined;
+                                        return { ...msg, content: newContent, toolCalls: newToolCalls, stage: newStage, errorClass: classifyError(event.content ?? "") };
                                     }
 
                                     return { ...msg, content: newContent, toolCalls: newToolCalls, stage: newStage };
@@ -534,7 +545,7 @@ export function ChatInterface({
             setMessages((prev) =>
                 prev.map((msg) =>
                     msg.id === assistantMessageId
-                        ? { ...msg, content: msg.content + "\n\n*Error communicating with AI.*", stage: undefined }
+                        ? { ...msg, stage: undefined, errorClass: "backend_down" }
                         : msg
                 )
             );
@@ -749,7 +760,30 @@ export function ChatInterface({
                                             : "gradient-ai text-white shadow-soft"
                                     )}
                                 >
-                                    {message.content ? (
+                                    {message.errorClass ? (
+                                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                                            <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                                                <AlertCircle size={14} style={{ color: "rgba(255,255,255,0.7)", flexShrink: 0, marginTop: 1 }} />
+                                                <span style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", lineHeight: 1.5 }}>
+                                                    {CHAT_ERROR_MESSAGES[message.errorClass]?.text ?? CHAT_ERROR_MESSAGES.unknown.text}
+                                                </span>
+                                            </div>
+                                            {CHAT_ERROR_MESSAGES[message.errorClass]?.actionLabel && (
+                                                <a
+                                                    href={CHAT_ERROR_MESSAGES[message.errorClass].actionPath}
+                                                    style={{
+                                                        fontSize: 12,
+                                                        color: "rgba(255,255,255,0.9)",
+                                                        textDecoration: "underline",
+                                                        textUnderlineOffset: 3,
+                                                        marginLeft: 22,
+                                                    }}
+                                                >
+                                                    {CHAT_ERROR_MESSAGES[message.errorClass].actionLabel}
+                                                </a>
+                                            )}
+                                        </div>
+                                    ) : message.content ? (
                                         <>
                                             {message.role === "user" ? (
                                                 <div className="whitespace-pre-wrap text-sm leading-relaxed">
