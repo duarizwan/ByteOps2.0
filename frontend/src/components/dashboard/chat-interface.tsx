@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, User, Paperclip, Mic, Mail, ExternalLink, Loader2, HelpCircle } from "lucide-react";
+import { Send, User, Paperclip, Mic, Mail, ExternalLink, Loader2, HelpCircle, X } from "lucide-react";
 import { useAuth } from "@clerk/nextjs";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
@@ -9,6 +9,7 @@ import { useConversations, ConversationMessage } from "@/hooks/use-conversations
 import { ByteOpsLogoMark } from "@/lib/brand-icons";
 import { useToolConnections } from "@/hooks/use-tool-connections";
 import { TOOL_CAPABILITIES } from "@/lib/tool-capabilities";
+import { api } from "@/lib/api";
 
 /* ========================
    Types
@@ -19,6 +20,8 @@ interface Message {
     content: string;
     timestamp: Date;
     toolCalls?: ToolCall[];
+    stage?: string;
+    errorClass?: string;
 }
 
 interface ToolCall {
@@ -26,6 +29,32 @@ interface ToolCall {
     args?: string;
     result?: string;
     status: "pending" | "done" | "error";
+}
+
+interface ApprovalRequest {
+    run_id: string;
+    tool: string;
+    action: string;
+    input: Record<string, unknown>;
+    risk: "read" | "write" | "external_send" | "destructive";
+    reason: string;
+}
+
+interface WorkflowDraftAction {
+    tool: string;
+    label: string;
+}
+
+interface WorkflowDraft {
+    run_id: string;
+    name: string;
+    trigger: {
+        type?: string;
+        label?: string;
+    };
+    actions: WorkflowDraftAction[];
+    missing_tools: string[];
+    review_reasons: string[];
 }
 
 interface EmailResult {
@@ -61,6 +90,23 @@ const SUGGESTED_PROMPTS = [
     "Show high-priority tasks",
 ];
 
+const STAGE_LABELS = {
+    understanding:  "Understanding request…",
+    routing:        "Routing to specialist agent…",
+    awaiting:       "Waiting for approval…",
+    finalizing:     "Finalizing response…",
+} as const;
+
+const SUPPORTED_WORKFLOW_ACTIONS: WorkflowDraftAction[] = [
+    { tool: "gmail", label: "Review Gmail activity" },
+    { tool: "slack", label: "Review Slack activity" },
+    { tool: "jira", label: "Review Jira items" },
+    { tool: "github", label: "Review GitHub activity" },
+    { tool: "calendar", label: "Review Calendar events" },
+    { tool: "dropbox", label: "Review Dropbox files" },
+    { tool: "byteops", label: "List urgent tasks" },
+];
+
 /* ========================
    Utility Components
    ======================== */
@@ -90,6 +136,172 @@ const EmailCard = ({ data }: { data: EmailResult }) => {
 };
 
 /* ========================
+   Approval Card
+   ======================== */
+function ApprovalCard({ approval, onApprove, onReject }: {
+    approval: ApprovalRequest;
+    onApprove: () => void;
+    onReject: () => void;
+}) {
+    const riskBorder: Record<string, string> = {
+        destructive: "border-red-500/40 bg-red-500/5",
+        external_send: "border-orange-500/40 bg-orange-500/5",
+        write: "border-yellow-500/40 bg-yellow-500/5",
+        read: "border-green-500/40 bg-green-500/5",
+    };
+    return (
+        <div className={"rounded-xl border p-4 my-2 " + (riskBorder[approval.risk] || "border-border")}>
+            <p className="text-xs font-semibold text-muted-foreground mb-1">Action requires approval</p>
+            <p className="text-sm font-medium mb-1">{approval.tool} → {approval.action}</p>
+            <p className="text-xs text-muted-foreground mb-2">{approval.reason}</p>
+            {Object.keys(approval.input).length > 0 && (
+                <pre className="text-xs bg-accent/50 rounded p-2 mb-3 overflow-x-auto max-h-32 whitespace-pre-wrap">
+                    {JSON.stringify(approval.input, null, 2)}
+                </pre>
+            )}
+            <div className="flex gap-2">
+                <button onClick={onApprove} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:opacity-90">
+                    Approve
+                </button>
+                <button onClick={onReject} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20">
+                    Reject
+                </button>
+            </div>
+        </div>
+    );
+}
+
+function WorkflowDraftCard({ draft, onDraftChange, onApprove, onDismiss, isApproving, approveError }: {
+    draft: WorkflowDraft;
+    onDraftChange: (draft: WorkflowDraft) => void;
+    onApprove: () => void;
+    onDismiss: () => void;
+    isApproving: boolean;
+    approveError?: string | null;
+}) {
+    const [selectedActionTool, setSelectedActionTool] = useState(SUPPORTED_WORKFLOW_ACTIONS[0].tool);
+
+    const updateActionLabel = (index: number, label: string) => {
+        onDraftChange({
+            ...draft,
+            actions: draft.actions.map((action, actionIndex) =>
+                actionIndex === index ? { ...action, label } : action
+            ),
+        });
+    };
+
+    const removeAction = (index: number) => {
+        onDraftChange({
+            ...draft,
+            actions: draft.actions.filter((_, actionIndex) => actionIndex !== index),
+        });
+    };
+
+    const addDraftAction = () => {
+        const action = SUPPORTED_WORKFLOW_ACTIONS.find((item) => item.tool === selectedActionTool);
+        if (!action) return;
+        onDraftChange({
+            ...draft,
+            actions: [...draft.actions, { ...action }],
+        });
+    };
+
+    return (
+        <div className="rounded-xl border border-yellow-500/40 bg-yellow-500/5 p-4 my-2">
+            <p className="text-xs font-semibold text-muted-foreground mb-1">Workflow draft needs review</p>
+            <div className="space-y-3 text-xs text-muted-foreground">
+                <div>
+                    <label className="block font-medium text-foreground mb-1">Name</label>
+                    <input
+                        value={draft.name}
+                        onChange={(event) => onDraftChange({ ...draft, name: event.target.value })}
+                        className="w-full rounded-lg border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:ring-2 focus:ring-primary"
+                    />
+                </div>
+                <div>
+                    <label className="block font-medium text-foreground mb-1">Trigger</label>
+                    <input
+                        value={draft.trigger.label || ""}
+                        onChange={(event) => onDraftChange({
+                            ...draft,
+                            trigger: { ...draft.trigger, label: event.target.value },
+                        })}
+                        className="w-full rounded-lg border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:ring-2 focus:ring-primary"
+                    />
+                </div>
+                <div>
+                    <p className="font-medium text-foreground mb-1">Actions</p>
+                    <div className="mt-1 space-y-1">
+                        {draft.actions.map((action, index) => (
+                            <div key={`${action.tool}-${index}`} className="rounded-lg bg-background/60 p-2 space-y-1">
+                                <input
+                                    value={action.label}
+                                    onChange={(event) => updateActionLabel(index, event.target.value)}
+                                    className="w-full rounded-lg border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:ring-2 focus:ring-primary"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => removeAction(index)}
+                                    className="text-xs text-destructive hover:underline"
+                                >
+                                    Remove action
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="mt-2 flex flex-col sm:flex-row gap-2">
+                        <select
+                            value={selectedActionTool}
+                            onChange={(event) => setSelectedActionTool(event.target.value)}
+                            className="flex-1 rounded-lg border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:ring-2 focus:ring-primary"
+                        >
+                            {SUPPORTED_WORKFLOW_ACTIONS.map((action) => (
+                                <option key={action.tool} value={action.tool}>
+                                    {action.label}
+                                </option>
+                            ))}
+                        </select>
+                        <button
+                            type="button"
+                            onClick={addDraftAction}
+                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-accent text-foreground hover:bg-accent/80"
+                        >
+                            Add action
+                        </button>
+                    </div>
+                </div>
+                {draft.review_reasons.length > 0 && (
+                    <div className="space-y-1">
+                        {draft.review_reasons.map((reason, index) => (
+                            <p key={index}>{reason}</p>
+                        ))}
+                    </div>
+                )}
+            </div>
+            {approveError && (
+                <p className="text-xs text-destructive mt-2">{approveError}</p>
+            )}
+            <div className="flex gap-2 mt-3">
+                <button
+                    onClick={onApprove}
+                    disabled={isApproving || !draft.name.trim() || draft.actions.length === 0}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-60"
+                >
+                    {isApproving ? "Saving…" : "Approve draft"}
+                </button>
+                <button
+                    onClick={onDismiss}
+                    disabled={isApproving}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg bg-accent text-foreground hover:bg-accent/80 disabled:opacity-60"
+                >
+                    Dismiss
+                </button>
+            </div>
+        </div>
+    );
+}
+
+/* ========================
    Component
    ======================== */
 export function ChatInterface({
@@ -106,7 +318,13 @@ export function ChatInterface({
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [attachedFile, setAttachedFile] = useState<File | null>(null);
     const [showHelp, setShowHelp] = useState(false);
+    const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
+    const [pendingWorkflowDraft, setPendingWorkflowDraft] = useState<WorkflowDraft | null>(null);
+    const [isApprovingWorkflowDraft, setIsApprovingWorkflowDraft] = useState(false);
+    const [workflowDraftError, setWorkflowDraftError] = useState<string | null>(null);
     const helpRef = useRef<HTMLDivElement>(null);
     const { connections } = useToolConnections();
     const connectedTools = connections.filter(c => c.status === "connected");
@@ -174,8 +392,10 @@ export function ChatInterface({
     // ── Send message ──────────────────────────────────────────────────────────
     /** Pass an explicit `message` to send a suggested prompt without going through the input state. */
     const handleSend = async (message?: string) => {
-        const userText = (message ?? input).trim();
-        if (!userText || isTyping) return;
+        const baseText = (message ?? input).trim();
+        const fileNote = attachedFile ? `\n[Attached file: ${attachedFile.name}]` : "";
+        const userText = baseText + fileNote;
+        if (!userText.trim() || isTyping) return;
 
         if (!message) {
             setInput("");
@@ -183,6 +403,7 @@ export function ChatInterface({
                 textareaRef.current.style.height = "auto";
             }
         }
+        setAttachedFile(null);
         setIsTyping(true);
 
         const userMessage: Message = {
@@ -197,7 +418,7 @@ export function ChatInterface({
         setMessages((prev) => [
             ...prev,
             userMessage,
-            { id: assistantMessageId, role: "assistant", content: "", timestamp: new Date(), toolCalls: [] },
+            { id: assistantMessageId, role: "assistant", content: "", timestamp: new Date(), toolCalls: [], stage: STAGE_LABELS.understanding },
         ]);
 
         try {
@@ -241,16 +462,42 @@ export function ChatInterface({
                                 onConversationCreated(event.conversation_id);
                             }
 
+                            if (event.type === "approval_required") {
+                                setPendingApproval({
+                                    run_id: event.run_id,
+                                    tool: event.tool,
+                                    action: event.action,
+                                    input: event.input || {},
+                                    risk: event.risk,
+                                    reason: event.reason,
+                                });
+                            }
+                            if (event.type === "workflow_draft") {
+                                setPendingWorkflowDraft({
+                                    run_id: event.run_id,
+                                    name: event.name,
+                                    trigger: event.trigger || {},
+                                    actions: Array.isArray(event.actions) ? event.actions : [],
+                                    missing_tools: Array.isArray(event.missing_tools) ? event.missing_tools : [],
+                                    review_reasons: Array.isArray(event.review_reasons) ? event.review_reasons : [],
+                                });
+                                // Draft is ready — unblock input so user can edit while reviewing
+                                setIsTyping(false);
+                            }
+
                             setMessages((prev) =>
                                 prev.map((msg) => {
                                     if (msg.id !== assistantMessageId) return msg;
 
                                     let newContent = msg.content;
                                     const newToolCalls = [...(msg.toolCalls || [])];
+                                    let newStage = msg.stage;
 
                                     if ((event.type === "delta" || event.type === "text") && event.content) {
                                         newContent += event.content;
+                                        newStage = undefined; // content flowing — clear stage label
                                     } else if (event.type === "tool_call_start") {
+                                        newStage = STAGE_LABELS.routing;
                                         newToolCalls.push({
                                             tool: event.tool,
                                             args: event.args,
@@ -262,14 +509,18 @@ export function ChatInterface({
                                         );
                                         if (tc) {
                                             tc.status = "done";
-                                            // Backend sends result in `content`, not `result`
                                             tc.result = event.content;
                                         }
+                                    } else if (event.type === "approval_required") {
+                                        newStage = STAGE_LABELS.awaiting;
+                                    } else if (event.type === "done") {
+                                        newStage = undefined;
                                     } else if (event.type === "error") {
                                         newContent = `⚠️ ${event.content}`;
+                                        newStage = undefined;
                                     }
 
-                                    return { ...msg, content: newContent, toolCalls: newToolCalls };
+                                    return { ...msg, content: newContent, toolCalls: newToolCalls, stage: newStage };
                                 })
                             );
                         } catch (e) {
@@ -289,6 +540,70 @@ export function ChatInterface({
             );
         } finally {
             setIsTyping(false);
+        }
+    };
+
+    const handleApprove = async () => {
+        if (!pendingApproval) return;
+        const token = await getToken();
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const response = await fetch(apiBase + "/api/agent-runs/" + pendingApproval.run_id + "/approve", {
+            method: "POST",
+            headers: { Authorization: "Bearer " + token },
+        });
+        if (!response.ok) {
+            throw new Error("Approval failed");
+        }
+        setPendingApproval(null);
+        setMessages((prev) => [
+            ...prev,
+            {
+                id: Date.now().toString(),
+                role: "assistant",
+                content: `Action approved. ${pendingApproval.tool} → ${pendingApproval.action} is now running.`,
+                timestamp: new Date(),
+            },
+        ]);
+    };
+
+    const handleReject = async () => {
+        if (!pendingApproval) return;
+        const token = await getToken();
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const response = await fetch(apiBase + "/api/agent-runs/" + pendingApproval.run_id + "/reject", {
+            method: "POST",
+            headers: { Authorization: "Bearer " + token },
+        });
+        if (!response.ok) {
+            throw new Error("Rejection failed");
+        }
+        setPendingApproval(null);
+    };
+
+    const handleApproveWorkflowDraft = async () => {
+        if (!pendingWorkflowDraft) return;
+        setIsApprovingWorkflowDraft(true);
+        setWorkflowDraftError(null);
+        try {
+            const result = await api<{ workflow_status: string }>(
+                `/api/agent-runs/${pendingWorkflowDraft.run_id}/approve-workflow-draft`,
+                { method: "POST", body: JSON.stringify({ draft: pendingWorkflowDraft }) },
+            );
+            const statusLabel = result.workflow_status === "paused" ? "Paused" : "Active";
+            setPendingWorkflowDraft(null);
+            setMessages((prev) => [
+                ...prev,
+                {
+                    id: Date.now().toString(),
+                    role: "assistant",
+                    content: `Workflow saved. Status: ${statusLabel}.`,
+                    timestamp: new Date(),
+                },
+            ]);
+        } catch (e: unknown) {
+            setWorkflowDraftError((e instanceof Error ? e.message : null) ?? "Could not save workflow — please try again.");
+        } finally {
+            setIsApprovingWorkflowDraft(false);
         }
     };
 
@@ -455,7 +770,22 @@ export function ChatInterface({
                                                     [&>strong]:font-semibold [&>em]:italic
                                                     [&_code]:bg-white/20 [&_code]:rounded [&_code]:px-1 [&_code]:text-xs
                                                     [&_strong]:font-semibold [&_em]:italic">
-                                                    <ReactMarkdown>{message.content}</ReactMarkdown>
+                                                    <ReactMarkdown
+                                                        components={{
+                                                            a: ({ href, children }) => (
+                                                                <a
+                                                                    href={href}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="underline underline-offset-2 opacity-90 hover:opacity-100 break-all"
+                                                                >
+                                                                    {children}
+                                                                </a>
+                                                            ),
+                                                        }}
+                                                    >
+                                                        {message.content}
+                                                    </ReactMarkdown>
                                                 </div>
                                             )}
                                             {message.id === "welcome" && (
@@ -473,13 +803,23 @@ export function ChatInterface({
                                             )}
                                         </>
                                     ) : (
-                                        message.role === "assistant" &&
-                                        (!message.toolCalls || message.toolCalls.length === 0) && (
-                                            <div className="flex gap-1 h-5 items-center">
-                                                <div className="w-1.5 h-1.5 bg-white/70 rounded-full animate-pulse" style={{ animationDelay: "0ms" }} />
-                                                <div className="w-1.5 h-1.5 bg-white/70 rounded-full animate-pulse" style={{ animationDelay: "150ms" }} />
-                                                <div className="w-1.5 h-1.5 bg-white/70 rounded-full animate-pulse" style={{ animationDelay: "300ms" }} />
-                                            </div>
+                                        message.role === "assistant" && (
+                                            message.stage ? (
+                                                <div className="flex items-center gap-2 h-5">
+                                                    <div className="w-1.5 h-1.5 bg-white/60 rounded-full animate-pulse" />
+                                                    <span style={{ fontSize: 12, color: "rgba(255,255,255,0.75)", fontStyle: "italic" }}>
+                                                        {message.stage}
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                (!message.toolCalls || message.toolCalls.length === 0) && (
+                                                    <div className="flex gap-1 h-5 items-center">
+                                                        <div className="w-1.5 h-1.5 bg-white/70 rounded-full animate-pulse" style={{ animationDelay: "0ms" }} />
+                                                        <div className="w-1.5 h-1.5 bg-white/70 rounded-full animate-pulse" style={{ animationDelay: "150ms" }} />
+                                                        <div className="w-1.5 h-1.5 bg-white/70 rounded-full animate-pulse" style={{ animationDelay: "300ms" }} />
+                                                    </div>
+                                                )
+                                            )
                                         )
                                     )}
 
@@ -492,13 +832,59 @@ export function ChatInterface({
                         </div>
                     ))}
 
+                    {pendingApproval && (
+                        <ApprovalCard
+                            approval={pendingApproval}
+                            onApprove={handleApprove}
+                            onReject={handleReject}
+                        />
+                    )}
+
+                    {pendingWorkflowDraft && (
+                        <WorkflowDraftCard
+                            draft={pendingWorkflowDraft}
+                            onDraftChange={setPendingWorkflowDraft}
+                            onApprove={handleApproveWorkflowDraft}
+                            onDismiss={() => { setPendingWorkflowDraft(null); setWorkflowDraftError(null); }}
+                            isApproving={isApprovingWorkflowDraft}
+                            approveError={workflowDraftError}
+                        />
+                    )}
+
                     <div ref={messagesEndRef} />
                 </div>
             )}
 
             {/* Input Area */}
             <div className="border-t border-border p-4 bg-card/50 backdrop-blur-sm rounded-b-2xl flex-shrink-0">
+                {/* Attached file chip */}
+                {attachedFile && (
+                    <div className="flex items-center gap-2 mb-2 px-1">
+                        <span className="flex items-center gap-1.5 text-xs bg-accent text-foreground rounded-lg px-2.5 py-1 border border-border">
+                            <Paperclip className="w-3 h-3 text-primary" />
+                            {attachedFile.name}
+                            <button
+                                onClick={() => setAttachedFile(null)}
+                                className="ml-1 text-muted-foreground hover:text-foreground"
+                                aria-label="Remove attachment"
+                            >
+                                <X className="w-3 h-3" />
+                            </button>
+                        </span>
+                    </div>
+                )}
                 <div className="flex gap-3 items-end">
+                    {/* Hidden file input */}
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        className="hidden"
+                        onChange={(e) => {
+                            const file = e.target.files?.[0] ?? null;
+                            setAttachedFile(file);
+                            e.target.value = "";
+                        }}
+                    />
                     <textarea
                         ref={textareaRef}
                         value={input}
@@ -515,7 +901,12 @@ export function ChatInterface({
                         disabled={isTyping || isLoadingHistory}
                     />
                     <div className="flex gap-2 pb-2">
-                        <button className="text-muted-foreground hover:text-foreground rounded-xl p-2 transition-colors">
+                        <button
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={isTyping || isLoadingHistory}
+                            className="text-muted-foreground hover:text-foreground rounded-xl p-2 transition-colors disabled:opacity-40"
+                            aria-label="Attach file"
+                        >
                             <Paperclip className="w-5 h-5" />
                         </button>
                         <button className="text-muted-foreground hover:text-foreground rounded-xl p-2 transition-colors">
@@ -523,7 +914,7 @@ export function ChatInterface({
                         </button>
                         <button
                             onClick={() => handleSend()}
-                            disabled={!input.trim() || isTyping || isLoadingHistory}
+                            disabled={(!input.trim() && !attachedFile) || isTyping || isLoadingHistory}
                             className="gradient-primary hover:shadow-glow p-2 rounded-xl text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-shadow"
                         >
                             {isTyping ? (
