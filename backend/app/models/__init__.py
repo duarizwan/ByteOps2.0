@@ -6,6 +6,7 @@ from app.models.conversation import Conversation
 from app.models.message import Message, MessageRole
 from app.models.notification import Notification, NotificationPriority
 from app.models.workflow import Workflow, WorkflowStatus
+from app.models.agent_run import AgentRun, AgentRunStatus, AgentRunStep, AgentRunStepType
 
 __all__ = [
     "User",
@@ -19,4 +20,8 @@ __all__ = [
     "NotificationPriority",
     "Workflow",
     "WorkflowStatus",
+    "AgentRun",
+    "AgentRunStatus",
+    "AgentRunStep",
+    "AgentRunStepType",
 ]

@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.database import engine
-from app.api import oauth, tools, users, chat, notifications, sync, workflows
+from app.api import agent_runs, oauth, tools, users, chat, notifications, sync, workflows
 from app.services.sync.scheduler import start_scheduler, stop_scheduler
 
 
@@ -61,6 +61,7 @@ def create_app() -> FastAPI:
     app.include_router(oauth.router)
     app.include_router(chat.router)
     app.include_router(notifications.router)
+    app.include_router(agent_runs.router)
     app.include_router(workflows.router)
     app.include_router(sync.router)
 

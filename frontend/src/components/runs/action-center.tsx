@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Zap } from "lucide-react";
+import { ArrowLeft, Activity } from "lucide-react";
 import { useAgentRuns, type AgentRun } from "@/hooks/use-agent-runs";
 import type { FilterTab, CategorizedRuns } from "@/lib/action-center-types";
 import { ActionCard } from "./action-card";
@@ -191,9 +191,9 @@ export function ActionCenter() {
                 <div style={{ width: 1, height: 16, background: "var(--border)" }} />
 
                 <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                    <Zap size={14} style={{ color: "var(--primary)" }} />
+                    <Activity size={14} style={{ color: "var(--primary)" }} />
                     <span style={{ fontSize: 13, fontWeight: 600, color: "var(--foreground)" }}>
-                        Action Center
+                        Execution Trace
                     </span>
                 </div>
 

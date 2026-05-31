@@ -16,20 +16,14 @@ class _FakeConnection:
     refresh_token = "test-refresh-token"
 
 
-def _text_block(text: str) -> MagicMock:
-    b = MagicMock()
-    b.type = "text"
-    b.text = text
-    return b
+from app.core.llm_client import TextBlock, ToolUseBlock
+
+def _text_block(text: str) -> TextBlock:
+    return TextBlock(type="text", text=text)
 
 
-def _tool_use_block(name: str, tool_id: str, input_: dict) -> MagicMock:
-    b = MagicMock()
-    b.type = "tool_use"
-    b.name = name
-    b.id = tool_id
-    b.input = input_
-    return b
+def _tool_use_block(name: str, tool_id: str, input_: dict) -> ToolUseBlock:
+    return ToolUseBlock(type="tool_use", id=tool_id, name=name, input=input_)
 
 
 def _llm_response(content: list) -> MagicMock:
@@ -95,7 +89,7 @@ async def test_calendar_agent_passes_tokens_to_subprocess():
         yield session_mock
 
     mock_llm = MagicMock()
-    mock_llm.messages.create = AsyncMock(
+    mock_llm.create_message = AsyncMock(
         return_value=_llm_response([_text_block("Here are your events.")])
     )
 
@@ -105,7 +99,7 @@ async def test_calendar_agent_passes_tokens_to_subprocess():
         patch("app.agents.calendar_agent.StdioServerParameters", side_effect=_capture_params),
         patch("app.agents.calendar_agent.stdio_client", _fake_stdio),
         patch("app.agents.calendar_agent.ClientSession", _fake_session),
-        patch("app.agents.calendar_agent._get_calendar_llm", return_value=mock_llm),
+        patch("app.agents.calendar_agent.get_llm_client", return_value=mock_llm),
     ):
         await run_calendar_agent("What's on my calendar?", [], conn, queue)
 
@@ -145,7 +139,7 @@ async def test_calendar_agent_emits_tool_call_events():
         return resp
 
     mock_llm = MagicMock()
-    mock_llm.messages.create = _create
+    mock_llm.create_message = _create
 
     with (
         patch("app.agents.calendar_agent.get_default_environment", return_value={}),
@@ -153,7 +147,7 @@ async def test_calendar_agent_emits_tool_call_events():
         patch("app.agents.calendar_agent.StdioServerParameters", return_value=MagicMock()),
         patch("app.agents.calendar_agent.stdio_client", _fake_stdio),
         patch("app.agents.calendar_agent.ClientSession", _fake_session),
-        patch("app.agents.calendar_agent._get_calendar_llm", return_value=mock_llm),
+        patch("app.agents.calendar_agent.get_llm_client", return_value=mock_llm),
     ):
         await run_calendar_agent("Show my events", [], conn, queue)
 

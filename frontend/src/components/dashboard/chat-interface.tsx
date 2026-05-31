@@ -488,13 +488,14 @@ export function ChatInterface({
             streamAbortRef.current?.abort();
             const chatTimeoutController = new AbortController();
             streamAbortRef.current = chatTimeoutController;
-            const resetChatTimeout = () => {
+            const resetChatTimeout = (isWaitingForUser = false) => {
                 if (chatTimeoutId) {
                     window.clearTimeout(chatTimeoutId);
                 }
+                const timeoutMs = isWaitingForUser ? 300000 : 45000;
                 chatTimeoutId = window.setTimeout(() => {
                     chatTimeoutController.abort();
-                }, 45000);
+                }, timeoutMs);
             };
             resetChatTimeout();
 
@@ -538,7 +539,8 @@ export function ChatInterface({
 
                         try {
                             const event = JSON.parse(dataStr);
-                            resetChatTimeout();
+                            const isWaiting = event.type === "approval_required" || event.type === "workflow_draft";
+                            resetChatTimeout(isWaiting);
                             if (event.type === "done" || event.type === "error") {
                                 sawTerminalEvent = true;
                             }

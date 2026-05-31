@@ -13,8 +13,12 @@ const BADGE: Record<string, { bg: string; text: string; label: string }> = {
 };
 
 const STATUS_BAR: Record<string, string> = {
-    completed: "#22C55E",
-    cancelled: "var(--muted-foreground)",
+    completed:        "#22C55E",
+    cancelled:        "var(--muted-foreground)",
+    failed:           "#F87171",
+    running:          "#60A5FA",
+    planning:         "#60A5FA",
+    waiting_approval: "#EAB308",
 };
 
 const STATUS_BADGE: Record<string, { label: string; bg: string; text: string }> = {

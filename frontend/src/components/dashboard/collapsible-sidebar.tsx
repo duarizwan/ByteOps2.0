@@ -5,6 +5,8 @@ import Link from "next/link";
 import {
     ChevronLeft,
     ChevronRight,
+    ChevronDown,
+    ChevronUp,
     Plus,
     MessageCircle,
     Trash2,
@@ -16,6 +18,7 @@ import {
     AlertCircle,
     CheckCircle2,
     ExternalLink,
+    Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ConversationSummary } from "@/hooks/use-conversations";
@@ -413,6 +416,7 @@ export function CollapsibleSidebar({
     onRenameConversation,
 }: CollapsibleSidebarProps) {
     const [showConnectModal, setShowConnectModal] = useState(false);
+    const [toolsExpanded, setToolsExpanded] = useState(true);
 
     // Live connection status from the backend
     const { isConnected } = useToolConnections();
@@ -497,15 +501,44 @@ export function CollapsibleSidebar({
                 </div>
             )}
 
-            {/* Tool Connections Header */}
+            {/* Runs nav link — prominent */}
+            <div className={cn("flex-shrink-0 border-t border-border", isCollapsed ? "px-2 py-2" : "px-3 py-2")}>
+                <Link
+                    href="/runs"
+                    title="Execution Trace"
+                    className={cn(
+                        "flex items-center gap-3 rounded-xl transition-all font-medium",
+                        "bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20",
+                        isCollapsed ? "justify-center p-2.5" : "px-3 py-2.5"
+                    )}
+                >
+                    <Activity className="w-4 h-4 flex-shrink-0" />
+                    {!isCollapsed && (
+                        <span className="text-sm flex-1">Execution Trace</span>
+                    )}
+                </Link>
+            </div>
+
+            {/* Tool Connections Header — collapsible */}
             {!isCollapsed && (
-                <div className="px-3 mb-2 border-t border-border pt-4 flex-shrink-0">
-                    <p className="text-xs font-semibold tracking-wider text-muted-foreground mb-2 px-3 uppercase">Tools</p>
+                <div className="px-3 flex-shrink-0 border-t border-border pt-3 pb-1">
+                    <button
+                        onClick={() => setToolsExpanded((v) => !v)}
+                        className="w-full flex items-center justify-between px-1 group"
+                    >
+                        <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Tools</p>
+                        <span className="text-muted-foreground group-hover:text-foreground transition-colors">
+                            {toolsExpanded
+                                ? <ChevronUp className="w-3.5 h-3.5" />
+                                : <ChevronDown className="w-3.5 h-3.5" />}
+                        </span>
+                    </button>
                 </div>
             )}
 
             {/* Tool List */}
-            <div className="flex flex-col gap-1 px-2 overflow-y-auto custom-scrollbar pb-4">
+            {(isCollapsed || toolsExpanded) && (
+            <div className="flex flex-col gap-1 px-2 overflow-y-auto custom-scrollbar pb-2">
                 {TOOL_REGISTRY.map((tool) => {
                     const connected = isConnected(tool.id);
                     const iconUrl = getBrandIconUrl(tool.id);
@@ -546,10 +579,11 @@ export function CollapsibleSidebar({
                     );
                 })}
             </div>
+            )}
 
             {/* Connect New Tool — opens modal */}
-            {!isCollapsed && (
-                <div className="p-3 mt-auto">
+            {!isCollapsed && toolsExpanded && (
+                <div className="p-3">
                     <button
                         onClick={() => setShowConnectModal(true)}
                         className="w-full bg-accent hover:bg-accent/80 text-accent-foreground text-sm font-medium py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors"

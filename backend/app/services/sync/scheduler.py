@@ -49,6 +49,13 @@ async def start_scheduler() -> None:
         id="periodic_sync",
         replace_existing=True,
     )
+    _scheduler.add_job(
+        _periodic_workflows_all,
+        trigger="interval",
+        minutes=_SYNC_INTERVAL_MINUTES,
+        id="periodic_workflows",
+        replace_existing=True,
+    )
 
     _scheduler.start()
     logger.info(
@@ -109,6 +116,19 @@ async def _periodic_sync_all() -> None:
     if tasks:
         await asyncio.gather(*tasks, return_exceptions=True)
     logger.info("Periodic sync complete — %d connections processed.", len(tasks))
+
+
+async def _periodic_workflows_all() -> None:
+    """Run due active workflows on the scheduler interval."""
+    from app.services.workflow_runner import execute_due_workflows
+
+    async with AsyncSessionLocal() as db:
+        result = await execute_due_workflows(db)
+    logger.info(
+        "Periodic workflows complete: %d of %d workflows ran.",
+        result["ran"],
+        result["scanned"],
+    )
 
 
 async def _run_single_sync(user_id: UUID, tool_type: ToolType) -> None:

@@ -31,6 +31,7 @@ class Workflow(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     trigger: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     actions: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    metadata_: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True, default=dict)
     status: Mapped[WorkflowStatus] = mapped_column(
         SAEnum(WorkflowStatus, name="workflow_status_enum"),
         default=WorkflowStatus.ACTIVE,

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Panel, Group, Separator, usePanelRef } from "react-resizable-panels";
 import { TopBar } from "@/components/dashboard/top-bar";
 import { CollapsibleSidebar } from "@/components/dashboard/collapsible-sidebar";
@@ -9,12 +10,15 @@ import { ContextPanel } from "@/components/dashboard/context-panel";
 import { useConversations } from "@/hooks/use-conversations";
 
 export default function DashboardPage() {
+    const searchParams = useSearchParams();
     const [isLeftCollapsed, setIsLeftCollapsed] = useState(false);
     const [isRightCollapsed, setIsRightCollapsed] = useState(false);
     const contextPanelRef = usePanelRef();
 
     // ── Shared conversation state ─────────────────────────────────────────────
-    const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+    const [activeConversationId, setActiveConversationId] = useState<string | null>(
+        searchParams.get("conversation")
+    );
     // chatKey: incremented on every "New Chat" click to force ChatInterface remount,
     // which resets all local state (messages, input, isTyping) even when
     // activeConversationId is already null (null→null wouldn't trigger useEffect).
@@ -22,8 +26,14 @@ export default function DashboardPage() {
     const { conversations, isLoading, refresh, deleteConversation, renameConversation } =
         useConversations();
 
+    // If navigated from another page with ?conversation=<id>, open that thread
+    useEffect(() => {
+        const id = searchParams.get("conversation");
+        if (id) setActiveConversationId(id);
+    }, [searchParams]);
+
     // Ref to the ContextPanel's refresh function — populated by the panel itself
-    const notificationsRefreshRef = useRef<(() => void) | null>(null);
+    const contextRefreshRef = useRef<(() => void) | null>(null);
 
     // ── Ask AI bridge: notification → chat input ──────────────────────────────
     const [pendingMessage, setPendingMessage] = useState<string | null>(null);
@@ -37,10 +47,14 @@ export default function DashboardPage() {
         (id: string) => {
             setActiveConversationId(id);
             refresh(); // pull new conversation into sidebar list
-            notificationsRefreshRef.current?.(); // surface new agent notifications immediately
+            contextRefreshRef.current?.(); // surface new agent notifications and workflows immediately
         },
         [refresh]
     );
+
+    const handleWorkflowSaved = useCallback(() => {
+        contextRefreshRef.current?.();
+    }, []);
 
     /** Called by the sidebar "New Chat" button.
      *  Always increments chatKey so ChatInterface fully remounts — this works
@@ -106,6 +120,7 @@ export default function DashboardPage() {
                                 key={chatKey}
                                 conversationId={activeConversationId}
                                 onConversationCreated={handleConversationCreated}
+                                onWorkflowSaved={handleWorkflowSaved}
                                 initialMessage={pendingMessage}
                                 onInitialMessageConsumed={clearPendingMessage}
                             />
@@ -132,7 +147,7 @@ export default function DashboardPage() {
                             <ContextPanel
                                 isCollapsed={isRightCollapsed}
                                 onToggleCollapse={handleCollapseRight}
-                                onRefreshRef={notificationsRefreshRef}
+                                onRefreshRef={contextRefreshRef}
                                 onSendToAI={handleSendToAI}
                             />
                         </div>

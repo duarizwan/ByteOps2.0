@@ -532,6 +532,9 @@ async def chat_handler(
                         pending_task.cancel()
 
                 if not done:
+                    if not chat_task.done():
+                        yield _sse("ping", "keepalive")
+                        continue
                     yield _sse("error", "Chat request timed out before ByteOps could respond.")
                     break
 

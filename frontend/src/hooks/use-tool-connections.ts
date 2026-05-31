@@ -107,6 +107,24 @@ export function useToolConnections() {
         [getToken]
     );
 
+    const silentRefresh = useCallback(
+        async (tool: ToolType): Promise<{ refreshed: boolean; error?: string }> => {
+            const token = await getToken();
+            if (!token) return { refreshed: false, error: "Not signed in" };
+            const res = await fetch(`${API_BASE}/api/auth/${tool}/refresh`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ detail: res.statusText }));
+                return { refreshed: false, error: err.detail ?? "Refresh failed" };
+            }
+            await fetchConnections();
+            return { refreshed: true };
+        },
+        [getToken, fetchConnections]
+    );
+
     const disconnect = useCallback(
         async (tool: ToolType) => {
             const token = await getToken();
@@ -128,5 +146,5 @@ export function useToolConnections() {
         [connections]
     );
 
-    return { connections, loading, error, isConnected, initiateConnect, disconnect, refetch: fetchConnections };
+    return { connections, loading, error, isConnected, initiateConnect, disconnect, silentRefresh, refetch: fetchConnections };
 }

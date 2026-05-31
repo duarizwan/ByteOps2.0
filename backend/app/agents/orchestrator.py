@@ -11,30 +11,13 @@ tool-agents (Gmail, Calendar, GitHub, etc.) as sub-routines.
 import asyncio
 import logging
 import string
-import anthropic
-from app.core.config import get_settings
 from app.agents.response_format import RESPONSE_FORMAT
+from app.core.llm_client import get_llm_client, RateLimitError
 
 logger = logging.getLogger(__name__)
 
-CLAUDE_MODEL = "claude-sonnet-4-6"
-
 # Pre-built translator reused on every detect_intent call
 _PUNCT_TRANSLATOR = str.maketrans('', '', string.punctuation)
-
-# Module-level Claude client — created once, reused for all requests
-_claude_client: anthropic.AsyncAnthropic | None = None
-
-
-def _get_claude_client() -> anthropic.AsyncAnthropic:
-    """Return (or lazily create) the shared Claude AsyncAnthropic client."""
-    global _claude_client
-    if _claude_client is None:
-        settings = get_settings()
-        _claude_client = anthropic.AsyncAnthropic(
-            api_key=settings.claude_api_key,
-        )
-    return _claude_client
 
 # ── Intent detection ─────────────────────────────────────────────────────────
 # Keyword sets for each specialist domain.
@@ -118,6 +101,10 @@ def detect_intent(message: str, history: list[dict] | None = None) -> str:
         last_asst = next((m for m in reversed(history) if m["role"] == "assistant"), None)
         if last_asst and last_asst.get("content"):
             last_lower = last_asst["content"].lower()
+            # Skip if the last response was a scope-redirect — using it as context
+            # would trap the user in the same agent forever.
+            if "i only handle" in last_lower:
+                return "general"
             last_clean = last_lower.translate(_PUNCT_TRANSLATOR)
             last_words = set(last_clean.split())
 
@@ -298,32 +285,27 @@ async def stream_general_response(
     Pushes `None` sentinel when the stream is complete.
     Returns the full assembled response text.
     """
-    client = _get_claude_client()
+    llm = get_llm_client()
     system_prompt = build_system_prompt(connected_tools or [])
-
-    # Claude takes system as a separate param; filter history to user/assistant only
     messages = [m for m in history if m["role"] in ("user", "assistant")]
 
     full_text = ""
 
-    # Retry up to 3 times on rate-limit
     for attempt in range(3):
         try:
-            async with client.messages.stream(
-                model=CLAUDE_MODEL,
-                max_tokens=8192,
-                system=system_prompt,
+            async for text in llm.stream_text(
                 messages=messages,
-            ) as stream:
-                async for text in stream.text_stream:
-                    full_text += text
-                    await queue.put(text)
-            break  # success — exit retry loop
-        except anthropic.RateLimitError:
+                system=system_prompt,
+                max_tokens=8192,
+            ):
+                full_text += text
+                await queue.put(text)
+            break
+        except RateLimitError:
             if attempt < 2:
-                await asyncio.sleep(20)
+                await asyncio.sleep(2 if attempt == 0 else 5)
             else:
                 raise
 
-    await queue.put(None)  # sentinel — consumer should stop after this
+    await queue.put(None)
     return full_text

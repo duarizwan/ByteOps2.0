@@ -25,7 +25,12 @@ class Settings(BaseSettings):
     backend_cors_origins: str = "http://localhost:3000"
 
     # --- AI / LLM ---
+    # Set whichever key is active; first present wins: Claude > Gemini > Groq
     claude_api_key: str = ""
+    gemini_api_key: str = ""
+    groq_api_key: str = ""
+    # Optional: override the default model for the active provider
+    llm_model: str = ""
 
     # --- OAuth2 Tool Secrets ---
     gmail_client_id: str = ""

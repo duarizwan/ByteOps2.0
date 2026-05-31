@@ -19,27 +19,14 @@ import asyncio
 import json
 import sys
 
-import anthropic
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client, get_default_environment
 
 from app.core.config import get_settings
+from app.core.llm_client import get_llm_client, TextBlock, ToolUseBlock, RateLimitError
 from app.models.tool_connection import ToolConnection
-from app.agents.response_format import RESPONSE_FORMAT
-
-CLAUDE_MODEL = "claude-sonnet-4-6"
-
-# Module-level client — created once, reused for all Calendar agent requests
-_calendar_llm: anthropic.AsyncAnthropic | None = None
-
-
-def _get_calendar_llm() -> anthropic.AsyncAnthropic:
-    """Return (or lazily create) the shared Calendar AsyncAnthropic client."""
-    global _calendar_llm
-    if _calendar_llm is None:
-        settings = get_settings()
-        _calendar_llm = anthropic.AsyncAnthropic(api_key=settings.claude_api_key)
-    return _calendar_llm
+from app.agents.response_format import RESPONSE_FORMAT, PLATFORM_LINKS
+from app.services.agent_runtime import policy_aware_call_tool
 
 
 CALENDAR_SYSTEM_PROMPT = """\
@@ -67,7 +54,7 @@ Confirmation rules:
 If a tool returns a permission error (403), tell the user:
   "Your Calendar connection needs to be reconnected with full access. Please go to
    Settings → Connections, disconnect Calendar, and reconnect it."
-""" + RESPONSE_FORMAT
+""" + RESPONSE_FORMAT + PLATFORM_LINKS
 
 
 async def run_calendar_agent(
@@ -75,6 +62,8 @@ async def run_calendar_agent(
     history: list[dict],
     tool_connection: ToolConnection,
     queue: asyncio.Queue,
+    run_id=None,
+    db=None,
 ) -> str:
     """Run the Calendar specialist agent.
 
@@ -87,7 +76,7 @@ async def run_calendar_agent(
     Returns the final assistant text response.
     """
     settings = get_settings()
-    llm = _get_calendar_llm()
+    llm = get_llm_client()
 
     # ── Build environment for the MCP subprocess ──────────────────────────────
     env = get_default_environment()
@@ -130,60 +119,43 @@ async def run_calendar_agent(
                 while True:
                     for attempt in range(3):
                         try:
-                            response = await llm.messages.create(
-                                model=CLAUDE_MODEL,
-                                max_tokens=8192,
-                                system=CALENDAR_SYSTEM_PROMPT,
+                            response = await llm.create_message(
                                 messages=messages,
-                                tools=claude_tools if claude_tools else anthropic.NOT_GIVEN,
+                                system=CALENDAR_SYSTEM_PROMPT,
+                                max_tokens=8192,
+                                tools=claude_tools if claude_tools else None,
                             )
                             break
-                        except anthropic.RateLimitError:
+                        except RateLimitError:
                             if attempt < 2:
-                                await asyncio.sleep(20)
+                                await asyncio.sleep(2 if attempt == 0 else 5)
                             else:
                                 raise
 
-                    # Extract text and tool_use blocks from response
                     text_content = ""
                     tool_use_blocks = []
                     for block in response.content:
-                        if block.type == "text":
+                        if isinstance(block, TextBlock):
                             text_content += block.text
-                        elif block.type == "tool_use":
+                        elif isinstance(block, ToolUseBlock):
                             tool_use_blocks.append(block)
 
-                    # Stream any text content to the client
                     if text_content:
                         await queue.put(text_content)
 
-                    # Append assistant message (content blocks preserved for tool_use context)
-                    messages.append({"role": "assistant", "content": response.content})
+                    llm.append_response(messages, response)
 
-                    # Exit: no more tool calls requested
                     if not tool_use_blocks:
                         return text_content or ""
 
-                    # Execute each tool call via MCP and collect results
                     tool_results = []
                     for block in tool_use_blocks:
-                        await queue.put(("tool_call_start", block.name, json.dumps(block.input)))
-
-                        tool_result = await session.call_tool(block.name, arguments=block.input)
-                        result_text = "\n".join(
-                            c.text for c in tool_result.content if c.type == "text"
+                        result_text = await policy_aware_call_tool(
+                            session, block, "calendar", run_id, db, queue
                         )
+                        tool_results.append({"tool_use_id": block.id, "content": result_text})
 
-                        await queue.put(("tool_call_result", block.name, result_text))
-
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": result_text,
-                        })
-
-                    # Feed all tool results back to Claude in a single user message
-                    messages.append({"role": "user", "content": tool_results})
+                    llm.append_tool_results(messages, tool_results)
 
         return "Done."
     except BaseExceptionGroup as eg:

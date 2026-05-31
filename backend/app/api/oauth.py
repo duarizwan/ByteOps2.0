@@ -308,7 +308,8 @@ async def oauth_callback(
 
     if connection:
         connection.access_token = access_token
-        connection.refresh_token = refresh_token
+        if refresh_token:
+            connection.refresh_token = refresh_token
         connection.token_expires_at = token_expires_at
         connection.scopes = scopes
         connection.status = ConnectionStatus.CONNECTED
@@ -339,6 +340,61 @@ async def oauth_callback(
     )
 
     return RedirectResponse(url=f"{_frontend_url()}/settings?connected={tool}")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Silent token refresh — no OAuth redirect required
+# ──────────────────────────────────────────────────────────────────────────────
+
+@router.post("/{tool}/refresh")
+async def refresh_tool_token(
+    tool: ToolType,
+    current_user: Annotated[User, Depends(get_current_clerk_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    background_tasks: BackgroundTasks,
+) -> dict:
+    """Silently refresh an access token using the stored refresh token.
+
+    Only works for tools that support refresh tokens (Gmail, Calendar).
+    Returns {"refreshed": true} on success or raises 400/404 on failure.
+    """
+    from app.services.sync.token_refresh import ensure_fresh_token
+
+    result = await db.execute(
+        select(ToolConnection).where(
+            ToolConnection.user_id == current_user.id,
+            ToolConnection.tool_type == tool,
+        )
+    )
+    connection = result.scalar_one_or_none()
+    if not connection:
+        raise HTTPException(status_code=404, detail=f"No {tool} connection found")
+
+    if not connection.refresh_token:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{tool} has no stored refresh token — please reconnect via OAuth.",
+        )
+
+    ok = await ensure_fresh_token(connection, db)
+    if not ok:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Could not refresh {tool} token — it may have been revoked. Please reconnect.",
+        )
+
+    if connection.status == ConnectionStatus.EXPIRED:
+        connection.status = ConnectionStatus.CONNECTED
+        await db.commit()
+
+    from app.services.sync.scheduler import trigger_immediate_sync
+    background_tasks.add_task(
+        trigger_immediate_sync,
+        user_id=current_user.id,
+        tool_type=tool,
+    )
+
+    return {"refreshed": True}
 
 
 # ──────────────────────────────────────────────────────────────────────────────

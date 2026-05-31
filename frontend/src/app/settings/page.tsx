@@ -6,6 +6,7 @@ import { TopBar } from "@/components/dashboard/top-bar";
 import { CollapsibleSidebar } from "@/components/dashboard/collapsible-sidebar";
 import { ToolCard, type ToolMeta } from "@/components/dashboard/tool-card";
 import { useToolConnections, type ToolType } from "@/hooks/use-tool-connections";
+import { useConversations } from "@/hooks/use-conversations";
 import { Loader2, AlertCircle, X } from "lucide-react";
 
 // ── Tool registry (matches backend ToolType enum) ────────────────────────────
@@ -80,7 +81,8 @@ function SettingsContent() {
     const [isLeftCollapsed, setIsLeftCollapsed] = useState(false);
     const [dismissedError, setDismissedError] = useState<string | null>(null);
     const [connectError, setConnectError] = useState<string | null>(null);
-    const { loading, error, isConnected, initiateConnect, disconnect, refetch } = useToolConnections();
+    const { loading, error, isConnected, initiateConnect, disconnect, silentRefresh, refetch } = useToolConnections();
+    const { conversations, isLoading: isLoadingConversations, deleteConversation } = useConversations();
 
     const handleConnect = async (id: ToolType) => {
         setConnectError(null);
@@ -108,12 +110,12 @@ function SettingsContent() {
                         <CollapsibleSidebar
                             isCollapsed={isLeftCollapsed}
                             onToggleCollapse={() => setIsLeftCollapsed((v) => !v)}
-                            conversations={[]}
-                            isLoadingConversations={false}
+                            conversations={conversations}
+                            isLoadingConversations={isLoadingConversations}
                             activeConversationId={null}
                             onNewChat={() => router.push("/dashboard")}
-                            onSelectConversation={() => router.push("/dashboard")}
-                            onDeleteConversation={async () => false}
+                            onSelectConversation={(id) => router.push(`/dashboard?conversation=${id}`)}
+                            onDeleteConversation={deleteConversation}
                         />
                     </div>
                 </div>
@@ -184,6 +186,7 @@ function SettingsContent() {
                                             isConnected={isConnected(tool.id as ToolType)}
                                             onConnect={handleConnect}
                                             onDisconnect={(id) => disconnect(id)}
+                                            onSilentRefresh={silentRefresh}
                                         />
                                     ))}
                                 </div>

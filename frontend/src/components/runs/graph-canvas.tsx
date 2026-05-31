@@ -12,13 +12,12 @@ import {
     MarkerType,
     Panel,
 } from "@xyflow/react";
-import { Maximize2, AlertCircle, Activity } from "lucide-react";
+import { Maximize2, AlertCircle } from "lucide-react";
 import { EllipseNode } from "./graph-nodes/ellipse-node";
 import { NodeDetailPopup } from "./node-detail-popup";
 import { graphTransformer, TYPE_COLOR, TYPE_BG_COLOR, BORDER_DASHED } from "@/lib/graph-transformer";
 import { useAgentRun } from "@/hooks/use-agent-run";
 import type { GraphNode, GraphNodeType } from "@/lib/graph-transformer";
-import type { AgentRun } from "@/hooks/use-agent-runs";
 
 const nodeTypes = { graphnode: EllipseNode };
 
@@ -31,92 +30,6 @@ const LEGEND: { type: GraphNodeType; label: string }[] = [
     { type: "approval_gate",  label: "Approval gate" },
     { type: "final_response", label: "Response" },
 ];
-
-function formatDuration(createdAt: string, completedAt: string): string {
-    const start = new Date(createdAt).getTime();
-    const end = new Date(completedAt).getTime();
-    const seconds = (end - start) / 1000;
-    return `${seconds.toFixed(1)}s`;
-}
-
-function formatDateOnly(isoString: string): string {
-    return new Date(isoString).toLocaleDateString(undefined, {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-    });
-}
-
-interface ExecutionHeaderProps {
-    run: AgentRun;
-}
-
-function ExecutionHeader({ run }: ExecutionHeaderProps) {
-    const shortId = run.id.slice(-8);
-    const toolCallCount = run.steps.filter((s) => s.step_type === "tool_call").length;
-    const duration = run.completed_at
-        ? formatDuration(run.created_at, run.completed_at)
-        : "running";
-
-    return (
-        <div style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            background: "var(--card)",
-            border: "1px solid var(--border)",
-            borderRadius: 24,
-            padding: "8px 16px",
-            fontSize: 11.5,
-            color: "var(--muted-foreground)",
-            backdropFilter: "blur(8px)",
-            marginTop: 12,
-            whiteSpace: "nowrap",
-        }}>
-            {/* Status badge */}
-            <span style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 4,
-                border: "1px solid #22C55E",
-                background: "rgba(34, 197, 94, 0.1)",
-                color: "#16A34A",
-                borderRadius: 999,
-                padding: "2px 8px",
-                fontSize: 10.5,
-                fontWeight: 500,
-            }}>
-                ● {run.status}
-            </span>
-
-            {/* Run ID */}
-            <span>Run …{shortId}</span>
-
-            <span style={{ color: "var(--border)" }}>|</span>
-
-            {/* Intent */}
-            <span>
-                Intent:{" "}
-                <strong style={{ color: "var(--foreground)" }}>{run.intent}</strong>
-            </span>
-
-            <span style={{ color: "var(--border)" }}>|</span>
-
-            {/* Duration */}
-            <span>{duration}</span>
-
-            <span style={{ color: "var(--border)" }}>|</span>
-
-            {/* Tool call count */}
-            <span>{toolCallCount} tool calls</span>
-
-            {/* Timestamp pushed to right */}
-            <span style={{ marginLeft: "auto", color: "var(--muted-foreground)" }}>
-                {formatDateOnly(run.created_at)}
-            </span>
-        </div>
-    );
-}
 
 interface GraphCanvasProps {
     selectedRunId: string | null;
@@ -221,14 +134,7 @@ function GraphCanvasInner({ selectedRunId, onLoad }: GraphCanvasProps) {
                     showInteractive={false}
                 />
 
-                {/* Execution header */}
-                {run && (
-                    <Panel position="top-center">
-                        <ExecutionHeader run={run as AgentRun} />
-                    </Panel>
-                )}
 
-                {/* Fit view button */}
                 <Panel position="top-right">
                     <button
                         onClick={handleFitView}

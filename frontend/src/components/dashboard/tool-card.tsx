@@ -1,9 +1,12 @@
 "use client";
 
-import { Check, RefreshCw, X } from "lucide-react";
+import { useState } from "react";
+import { Check, RefreshCw, X, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ToolType } from "@/hooks/use-tool-connections";
 import { getBrandIconUrl } from "@/lib/brand-icons";
+
+const SILENT_REFRESH_TOOLS: ToolType[] = ["gmail", "calendar"];
 
 interface ToolMeta {
     id: ToolType;
@@ -16,9 +19,24 @@ interface ToolCardProps {
     isConnected: boolean;
     onConnect: (tool: ToolType) => void;
     onDisconnect: (tool: ToolType) => Promise<void>;
+    onSilentRefresh?: (tool: ToolType) => Promise<{ refreshed: boolean; error?: string }>;
 }
 
-export function ToolCard({ tool, isConnected, onConnect, onDisconnect }: ToolCardProps) {
+export function ToolCard({ tool, isConnected, onConnect, onDisconnect, onSilentRefresh }: ToolCardProps) {
+    const [refreshing, setRefreshing] = useState(false);
+    const [refreshMsg, setRefreshMsg] = useState<string | null>(null);
+
+    const canSilentRefresh = SILENT_REFRESH_TOOLS.includes(tool.id) && !!onSilentRefresh;
+
+    async function handleSilentRefresh() {
+        if (!onSilentRefresh) return;
+        setRefreshing(true);
+        setRefreshMsg(null);
+        const result = await onSilentRefresh(tool.id);
+        setRefreshing(false);
+        setRefreshMsg(result.refreshed ? "Token refreshed" : (result.error ?? "Failed"));
+        setTimeout(() => setRefreshMsg(null), 3000);
+    }
     return (
         <div
             className={cn(
@@ -63,9 +81,25 @@ export function ToolCard({ tool, isConnected, onConnect, onDisconnect }: ToolCar
             </div>
 
             {/* Actions */}
-            <div className="flex gap-2 mt-auto pl-1">
+            <div className="flex flex-col gap-2 mt-auto pl-1">
+                {refreshMsg && (
+                    <p className={cn("text-xs", refreshMsg === "Token refreshed" ? "text-green-600 dark:text-green-400" : "text-destructive")}>
+                        {refreshMsg}
+                    </p>
+                )}
+                <div className="flex gap-2">
                 {isConnected ? (
                     <>
+                        {canSilentRefresh && (
+                            <button
+                                onClick={handleSilentRefresh}
+                                disabled={refreshing}
+                                className="flex items-center justify-center gap-1.5 px-3 py-2 text-sm rounded-xl border border-primary/40 text-primary bg-primary/5 hover:bg-primary/10 transition-colors disabled:opacity-50"
+                            >
+                                <Zap className="w-3.5 h-3.5" />
+                                {refreshing ? "Refreshing…" : "Refresh Token"}
+                            </button>
+                        )}
                         <button
                             onClick={() => onConnect(tool.id)}
                             className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm rounded-xl border border-border bg-background hover:bg-accent transition-colors"
@@ -88,6 +122,7 @@ export function ToolCard({ tool, isConnected, onConnect, onDisconnect }: ToolCar
                         Connect
                     </button>
                 )}
+                </div>
             </div>
         </div>
     );

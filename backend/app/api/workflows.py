@@ -19,6 +19,8 @@ from app.core.auth import get_current_clerk_user
 from app.core.database import get_db
 from app.models.user import User
 from app.models.workflow import Workflow, WorkflowStatus
+from app.services.workflow_creation import WRITE_ACTION_CUES, initial_next_run_at
+from app.services.workflow_runner import execute_workflow_run
 
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])
 
@@ -31,10 +33,20 @@ class WorkflowOut(BaseModel):
     trigger: dict
     actions: list
     trigger_label: str
+    condition_summary: str
     action_summary: str
+    action_count: int
+    approval_required: bool
+    approval_summary: str
     last_run_at: str | None
     next_run_at: str | None
     last_error: str | None
+    last_agent_run_id: str | None = None
+    last_run_status: str | None = None
+    last_run_summary: str | None = None
+    consecutive_failure_count: int = 0
+    last_failure_at: str | None = None
+    needs_attention: bool = False
     created_at: str | None = None
     updated_at: str | None = None
 
@@ -102,12 +114,72 @@ def _action_summary(actions: list) -> str:
     return summary
 
 
+def _condition_summary(trigger: dict, metadata: dict) -> str:
+    metadata_condition = metadata.get("condition_summary")
+    if isinstance(metadata_condition, str) and metadata_condition.strip():
+        return _clean_activity_text(metadata_condition) or metadata_condition.strip()
+
+    trigger_type = trigger.get("type") if isinstance(trigger, dict) else None
+    if trigger_type == "schedule":
+        return "Run when schedule is due."
+    if trigger_type == "event":
+        return "Run when matching activity appears."
+    if trigger_type == "manual":
+        return "Run only when started manually."
+    return "Run when workflow trigger matches."
+
+
+def _action_label(action) -> str:
+    if isinstance(action, dict):
+        label = action.get("label") or action.get("name") or action.get("operation") or action.get("tool")
+        if isinstance(label, str) and label.strip():
+            return _clean_activity_text(label) or label.strip()
+    if isinstance(action, str) and action.strip():
+        return _clean_activity_text(action) or action.strip()
+    return "Unnamed action"
+
+
+def _approval_required(actions: list) -> bool:
+    for action in actions:
+        if isinstance(action, dict) and (
+            action.get("requires_approval") is True or action.get("approval_required") is True
+        ):
+            return True
+        label = _action_label(action).lower()
+        if any(cue in label for cue in WRITE_ACTION_CUES):
+            return True
+    return False
+
+
+def _approval_summary(actions: list) -> str:
+    if _approval_required(actions):
+        return "Approval required before external changes."
+    return "No approval needed for read only actions."
+
+
 def _iso(value: datetime | None) -> str | None:
     return value.isoformat() if value else None
 
 
+def _failure_count(metadata: dict) -> int:
+    try:
+        return int(metadata.get("consecutive_failure_count") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _serialize(workflow: Workflow) -> WorkflowOut:
     status_value = workflow.status.value if hasattr(workflow.status, "value") else str(workflow.status)
+    metadata = workflow.metadata_ or {}
+    last_run_status = metadata.get("last_run_status")
+    last_run_summary = metadata.get("last_run_summary")
+    consecutive_failure_count = _failure_count(metadata)
+    needs_attention = (
+        status_value in {"failed", "waiting_approval"}
+        or bool(workflow.last_error)
+        or last_run_status in {"failed", "waiting_approval", "cancelled"}
+        or consecutive_failure_count > 0
+    )
     return WorkflowOut(
         id=str(workflow.id),
         name=_clean_activity_text(workflow.name) or workflow.name,
@@ -116,10 +188,20 @@ def _serialize(workflow: Workflow) -> WorkflowOut:
         trigger=workflow.trigger or {},
         actions=workflow.actions or [],
         trigger_label=_trigger_label(workflow.trigger or {}),
+        condition_summary=_condition_summary(workflow.trigger or {}, metadata),
         action_summary=_action_summary(workflow.actions or []),
+        action_count=len(workflow.actions or []),
+        approval_required=_approval_required(workflow.actions or []),
+        approval_summary=_approval_summary(workflow.actions or []),
         last_run_at=_iso(workflow.last_run_at),
         next_run_at=_iso(workflow.next_run_at),
         last_error=_clean_activity_text(workflow.last_error),
+        last_agent_run_id=metadata.get("last_agent_run_id"),
+        last_run_status=last_run_status,
+        last_run_summary=_clean_activity_text(last_run_summary),
+        consecutive_failure_count=consecutive_failure_count,
+        last_failure_at=metadata.get("last_failure_at"),
+        needs_attention=needs_attention,
         created_at=_iso(workflow.created_at),
         updated_at=_iso(workflow.updated_at),
     )
@@ -216,6 +298,8 @@ async def resume_workflow(
 ) -> WorkflowOut:
     workflow = await _get_user_workflow(workflow_id, current_user, db)
     workflow.status = WorkflowStatus.ACTIVE
+    if not workflow.next_run_at:
+        workflow.next_run_at = initial_next_run_at(workflow.trigger or {})
     workflow.last_error = None
     await db.commit()
     await db.refresh(workflow)
@@ -231,9 +315,35 @@ async def run_workflow(
     workflow = await _get_user_workflow(workflow_id, current_user, db)
     if workflow.status == WorkflowStatus.PAUSED:
         raise HTTPException(status_code=409, detail="Paused workflows cannot run.")
+    now = datetime.now(timezone.utc)
     workflow.status = WorkflowStatus.ACTIVE
-    workflow.last_run_at = datetime.now(timezone.utc)
+    workflow.last_run_at = now
     workflow.last_error = None
+    run_data = await execute_workflow_run(
+        workflow_name=workflow.name,
+        workflow_id=str(workflow.id),
+        trigger=workflow.trigger or {},
+        actions=workflow.actions or [],
+        user_id=current_user.id,
+        db=db,
+    )
+    metadata = {
+        **(workflow.metadata_ or {}),
+        "last_agent_run_id": run_data["id"],
+        "last_plan": run_data.get("plan"),
+        "last_run_status": run_data.get("status"),
+        "last_run_summary": run_data.get("final_response"),
+    }
+    if run_data.get("status") == "failed":
+        metadata["consecutive_failure_count"] = _failure_count(metadata) + 1
+        metadata["last_failure_at"] = now.isoformat()
+        workflow.status = WorkflowStatus.FAILED
+        workflow.last_error = run_data.get("final_response")
+    else:
+        metadata["consecutive_failure_count"] = 0
+        workflow.status = WorkflowStatus.ACTIVE
+        workflow.last_error = None
+    workflow.metadata_ = metadata
     await db.commit()
     await db.refresh(workflow)
     return _serialize(workflow)
