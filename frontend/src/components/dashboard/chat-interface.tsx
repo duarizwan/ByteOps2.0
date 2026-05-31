@@ -528,7 +528,7 @@ export function ChatInterface({
                                         newStage = undefined;
                                     } else if (event.type === "error") {
                                         newStage = undefined;
-                                        return { ...msg, content: newContent, toolCalls: newToolCalls, stage: newStage, errorClass: classifyError(event.content ?? "") };
+                                        return { ...msg, content: "", toolCalls: newToolCalls, stage: undefined, errorClass: classifyError(event.content ?? "") };
                                     }
 
                                     return { ...msg, content: newContent, toolCalls: newToolCalls, stage: newStage };
