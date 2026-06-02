@@ -5,7 +5,6 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@clerk/nextjs";
 import {
     Bell,
-    Workflow,
     ListChecks,
     Clock,
     ChevronLeft,
@@ -21,6 +20,9 @@ import {
     Pause,
     Play,
     RotateCw,
+    Trash2,
+    Workflow,
+    Sparkles,
 } from "lucide-react";
 import { getBrandIconUrl } from "@/lib/brand-icons";
 import { cn } from "@/lib/utils";
@@ -342,13 +344,35 @@ function WorkflowCard({
     onResume,
     onRunNow,
     onViewDetails,
+    onDelete,
 }: {
     workflow: WorkflowItem;
     onPause: () => void;
     onResume: () => void;
     onRunNow: () => void;
     onViewDetails: () => void;
+    onDelete: () => void;
 }) {
+    const [confirmDelete, setConfirmDelete] = useState(false);
+
+    const handleDeleteClick = () => {
+        if (confirmDelete) {
+            onDelete();
+        } else {
+            setConfirmDelete(true);
+        }
+    };
+
+    useEffect(() => {
+        if (!confirmDelete) return;
+        const handler = (e: MouseEvent) => {
+            const btn = document.getElementById(`delete-btn-${workflow.id}`);
+            if (btn && !btn.contains(e.target as Node)) setConfirmDelete(false);
+        };
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+    }, [confirmDelete, workflow.id]);
+
     const title = cleanActivityText(workflow.name);
     const description = workflow.description ? cleanActivityText(workflow.description) : null;
     const triggerLabel = cleanActivityText(workflow.trigger_label);
@@ -458,6 +482,19 @@ function WorkflowCard({
                     className="h-7 px-2 rounded-lg flex items-center gap-1 text-xs bg-accent hover:bg-accent/80 text-foreground transition-colors"
                 >
                     Details
+                </button>
+                <button
+                    id={`delete-btn-${workflow.id}`}
+                    onClick={handleDeleteClick}
+                    className={cn(
+                        "h-7 px-2 rounded-lg flex items-center gap-1 text-xs transition-colors",
+                        confirmDelete
+                            ? "bg-destructive/10 text-destructive hover:bg-destructive/20"
+                            : "bg-accent hover:bg-accent/80 text-muted-foreground hover:text-foreground"
+                    )}
+                >
+                    <Trash2 className="w-3 h-3" />
+                    {confirmDelete ? "Confirm delete?" : "Delete"}
                 </button>
             </div>
         </div>
@@ -860,6 +897,7 @@ export function ContextPanel({ isCollapsed, onToggleCollapse, onRefreshRef, onSe
         pause: pauseWorkflow,
         resume: resumeWorkflow,
         runNow: runWorkflowNow,
+        deleteWorkflow,
     } = useWorkflows();
     const { runs, isLoading: runsLoading } = useAgentRuns();
     const selectedWorkflow = workflows.find((workflow) => workflow.id === selectedWorkflowId) ?? null;
@@ -1035,6 +1073,7 @@ export function ContextPanel({ isCollapsed, onToggleCollapse, onRefreshRef, onSe
                                             onResume={() => resumeWorkflow(workflow.id)}
                                             onRunNow={() => handleRunWorkflowNow(workflow)}
                                             onViewDetails={() => setSelectedWorkflowId(workflow.id)}
+                                            onDelete={() => deleteWorkflow(workflow.id)}
                                         />
                                     );
                                 })}
