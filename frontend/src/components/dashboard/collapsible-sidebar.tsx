@@ -39,6 +39,58 @@ const TOOL_REGISTRY = [
 ];
 
 /* ========================
+   API Key tool config — fields required per tool
+   ======================== */
+const OAUTH_ONLY_TOOLS = new Set<ToolType>(["gmail", "calendar"]);
+
+interface ApiKeyField {
+    key: string;
+    label: string;
+    placeholder: string;
+    type: "text" | "password";
+}
+interface ApiKeyToolConfig {
+    fields: ApiKeyField[];
+    hint: string;
+    scopes: string;
+}
+
+const API_KEY_TOOL_CONFIG: Partial<Record<ToolType, ApiKeyToolConfig>> = {
+    github: {
+        fields: [{ key: "token", label: "Personal Access Token", placeholder: "ghp_xxxxxxxxxxxxxxxxxxxx", type: "password" }],
+        hint: "Generate at github.com → Settings → Developer settings → Personal access tokens",
+        scopes: "repo, read:org, read:user",
+    },
+    jira: {
+        fields: [
+            { key: "workspace", label: "Workspace URL", placeholder: "yourcompany.atlassian.net", type: "text" },
+            { key: "email", label: "Email Address", placeholder: "you@company.com", type: "text" },
+            { key: "token", label: "API Token", placeholder: "ATATxxxxxxxxxxxxxxxxxxxxxxxx", type: "password" },
+        ],
+        hint: "Generate at id.atlassian.com → Security → API tokens",
+        scopes: "read:jira-work, write:jira-work",
+    },
+    slack: {
+        fields: [{ key: "token", label: "Bot Token", placeholder: "xoxb-xxxxxxxxxxxx-xxxxxxxxxxxx", type: "password" }],
+        hint: "From your Slack App → OAuth & Permissions → Bot User OAuth Token",
+        scopes: "channels:read, chat:write, users:read",
+    },
+    trello: {
+        fields: [
+            { key: "api_key", label: "API Key", placeholder: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", type: "text" },
+            { key: "token", label: "API Token", placeholder: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", type: "password" },
+        ],
+        hint: "Get both at trello.com/app-key",
+        scopes: "read, write",
+    },
+    dropbox: {
+        fields: [{ key: "token", label: "Access Token", placeholder: "sl.xxxxxxxxxxxxxxxxxxxxxxxxxx", type: "password" }],
+        hint: "Generate at dropbox.com/developers/apps → your app → OAuth 2 → Generated access token",
+        scopes: "files.content.read, files.metadata.read",
+    },
+};
+
+/* ========================
    Date grouping helper
    ======================== */
 function formatDate(isoString: string): string {
@@ -255,29 +307,56 @@ function ConversationItem({ chat, isActive, onSelect, onDelete, onRename }: Conv
    Connect Tool Modal
    ======================== */
 function ConnectToolModal({ onClose }: { onClose: () => void }) {
-    const { isConnected, initiateConnect, disconnect } = useToolConnections();
-    const [connecting, setConnecting] = useState<ToolType | null>(null);
+    const { isConnected, initiateConnect, disconnect, connectViaApiKey } = useToolConnections();
+    const [activeTab, setActiveTab] = useState<"apikey" | "oauth">("apikey");
+    const [selectedTool, setSelectedTool] = useState<ToolType>("github");
+    const [credentials, setCredentials] = useState<Record<string, string>>({});
+    const [connecting, setConnecting] = useState(false);
+    const [oauthBusy, setOauthBusy] = useState<ToolType | null>(null);
     const [disconnecting, setDisconnecting] = useState<ToolType | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [successTool, setSuccessTool] = useState<ToolType | null>(null);
     const overlayRef = useRef<HTMLDivElement>(null);
 
-    // Close on Escape
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
         document.addEventListener("keydown", onKey);
         return () => document.removeEventListener("keydown", onKey);
     }, [onClose]);
 
-    const handleConnect = async (toolId: ToolType) => {
+    const handleSelectTool = (toolId: ToolType) => {
+        if (OAUTH_ONLY_TOOLS.has(toolId)) {
+            setActiveTab("oauth");
+            return;
+        }
+        setSelectedTool(toolId);
+        setCredentials({});
         setError(null);
-        setConnecting(toolId);
+    };
+
+    const handleApiKeyConnect = async () => {
+        setError(null);
+        setConnecting(true);
+        try {
+            await connectViaApiKey(selectedTool, credentials);
+            setSuccessTool(selectedTool);
+            setTimeout(onClose, 1200);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : `Failed to connect ${selectedTool}`);
+        } finally {
+            setConnecting(false);
+        }
+    };
+
+    const handleOAuthConnect = async (toolId: ToolType) => {
+        setError(null);
+        setOauthBusy(toolId);
         try {
             await initiateConnect(toolId);
-            // initiateConnect redirects to OAuth — browser navigates away
         } catch (err) {
             setError(err instanceof Error ? err.message : `Failed to connect ${toolId}`);
         } finally {
-            setConnecting(null);
+            setOauthBusy(null);
         }
     };
 
@@ -293,6 +372,11 @@ function ConnectToolModal({ onClose }: { onClose: () => void }) {
         }
     };
 
+    const config = API_KEY_TOOL_CONFIG[selectedTool];
+    const allFieldsFilled = config
+        ? config.fields.every((f) => (credentials[f.key] ?? "").trim().length > 0)
+        : false;
+
     return (
         <div
             ref={overlayRef}
@@ -304,13 +388,41 @@ function ConnectToolModal({ onClose }: { onClose: () => void }) {
                 <div className="flex items-center justify-between px-5 py-4 border-b border-border">
                     <div>
                         <h2 className="font-semibold text-foreground text-base">Connect a Tool</h2>
-                        <p className="text-xs text-muted-foreground mt-0.5">Select a tool to connect via OAuth</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                            {activeTab === "apikey" ? "Paste your credentials — no redirect needed" : "Select a tool to connect via OAuth"}
+                        </p>
                     </div>
                     <button
                         onClick={onClose}
                         className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
                     >
                         <X className="w-4 h-4" />
+                    </button>
+                </div>
+
+                {/* Tabs */}
+                <div className="flex border-b border-border">
+                    <button
+                        onClick={() => setActiveTab("apikey")}
+                        className={cn(
+                            "flex-1 py-2.5 text-xs font-medium transition-colors border-b-2",
+                            activeTab === "apikey"
+                                ? "border-primary text-foreground"
+                                : "border-transparent text-muted-foreground hover:text-foreground"
+                        )}
+                    >
+                        API Key
+                    </button>
+                    <button
+                        onClick={() => setActiveTab("oauth")}
+                        className={cn(
+                            "flex-1 py-2.5 text-xs font-medium transition-colors border-b-2",
+                            activeTab === "oauth"
+                                ? "border-primary text-foreground"
+                                : "border-transparent text-muted-foreground hover:text-foreground"
+                        )}
+                    >
+                        OAuth
                     </button>
                 </div>
 
@@ -325,75 +437,165 @@ function ConnectToolModal({ onClose }: { onClose: () => void }) {
                     </div>
                 )}
 
-                {/* Tool list */}
-                <div className="flex flex-col gap-1 p-3 max-h-[60vh] overflow-y-auto custom-scrollbar">
-                    {TOOL_REGISTRY.map((tool) => {
-                        const connected = isConnected(tool.id);
-                        const iconUrl = getBrandIconUrl(tool.id);
-                        const isConnectingThis = connecting === tool.id;
-                        const isDisconnectingThis = disconnecting === tool.id;
-                        const busy = isConnectingThis || isDisconnectingThis;
+                {/* API Key Panel */}
+                {activeTab === "apikey" && (
+                    <div className="p-4 flex flex-col gap-4 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                        {/* Tool chip selector */}
+                        <div>
+                            <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">Platform</p>
+                            <div className="flex flex-wrap gap-2">
+                                {TOOL_REGISTRY.map((tool) => {
+                                    const isOAuthOnly = OAUTH_ONLY_TOOLS.has(tool.id);
+                                    const iconUrl = getBrandIconUrl(tool.id);
+                                    return (
+                                        <button
+                                            key={tool.id}
+                                            onClick={() => handleSelectTool(tool.id)}
+                                            disabled={isOAuthOnly}
+                                            title={isOAuthOnly ? `${tool.name} requires OAuth` : undefined}
+                                            className={cn(
+                                                "flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-colors",
+                                                isOAuthOnly
+                                                    ? "opacity-40 cursor-not-allowed border-border text-muted-foreground"
+                                                    : selectedTool === tool.id
+                                                    ? "border-primary bg-primary/10 text-primary"
+                                                    : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                                            )}
+                                        >
+                                            {iconUrl ? (
+                                                // eslint-disable-next-line @next/next/no-img-element
+                                                <img src={iconUrl} alt="" width={13} height={13} className="object-contain rounded-sm" />
+                                            ) : (
+                                                <span className="w-3 h-3 rounded-sm bg-muted flex items-center justify-center text-[9px] font-bold">
+                                                    {tool.name[0]}
+                                                </span>
+                                            )}
+                                            {tool.name}
+                                            {isOAuthOnly && <span className="text-[9px] opacity-60 ml-0.5">OAuth only</span>}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
 
-                        return (
-                            <div
-                                key={tool.id}
-                                className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-accent/50 transition-colors"
-                            >
-                                {/* Icon */}
-                                <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center flex-shrink-0 overflow-hidden">
-                                    {iconUrl ? (
-                                        // eslint-disable-next-line @next/next/no-img-element
-                                        <img src={iconUrl} alt={tool.name} width={20} height={20} className="object-contain" />
-                                    ) : (
-                                        <span className="text-xs font-bold text-muted-foreground">{tool.name[0]}</span>
-                                    )}
+                        {/* Dynamic credential form */}
+                        {config && (
+                            <div className="flex flex-col gap-3">
+                                {/* Scopes note */}
+                                <div className="flex items-start gap-2 bg-primary/5 border border-primary/15 rounded-lg px-3 py-2">
+                                    <AlertCircle className="w-3.5 h-3.5 text-primary flex-shrink-0 mt-0.5" />
+                                    <span className="text-xs text-primary/80">Required access: {config.scopes}</span>
                                 </div>
 
-                                {/* Name + status */}
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-foreground">{tool.name}</p>
-                                    {connected ? (
-                                        <p className="text-xs text-emerald-500 flex items-center gap-1">
-                                            <CheckCircle2 className="w-3 h-3" /> Connected
-                                        </p>
-                                    ) : (
-                                        <p className="text-xs text-muted-foreground">Not connected</p>
-                                    )}
-                                </div>
+                                {/* Fields */}
+                                {config.fields.map((field) => (
+                                    <div key={field.key}>
+                                        <label className="text-xs text-muted-foreground font-medium uppercase tracking-wide block mb-1.5">
+                                            {field.label}
+                                        </label>
+                                        <input
+                                            type={field.type}
+                                            placeholder={field.placeholder}
+                                            value={credentials[field.key] ?? ""}
+                                            onChange={(e) =>
+                                                setCredentials((prev) => ({ ...prev, [field.key]: e.target.value }))
+                                            }
+                                            className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary transition-colors"
+                                        />
+                                    </div>
+                                ))}
 
-                                {/* Action button */}
-                                {connected ? (
-                                    <button
-                                        onClick={() => handleDisconnect(tool.id)}
-                                        disabled={busy}
-                                        className="text-xs px-3 py-1.5 rounded-lg bg-destructive/10 text-destructive hover:bg-destructive hover:text-white transition-colors disabled:opacity-50 flex items-center gap-1"
-                                    >
-                                        {isDisconnectingThis ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
-                                        Disconnect
-                                    </button>
+                                {/* Hint */}
+                                <p className="text-xs text-muted-foreground leading-relaxed">{config.hint}</p>
+
+                                {/* Connect button / success state */}
+                                {successTool === selectedTool ? (
+                                    <div className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-500/10 text-emerald-500 text-sm font-medium border border-emerald-500/20">
+                                        <CheckCircle2 className="w-4 h-4" /> Connected
+                                    </div>
                                 ) : (
                                     <button
-                                        onClick={() => handleConnect(tool.id)}
-                                        disabled={busy}
-                                        className="text-xs px-3 py-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-1"
+                                        onClick={handleApiKeyConnect}
+                                        disabled={!allFieldsFilled || connecting}
+                                        className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                                     >
-                                        {isConnectingThis ? (
-                                            <Loader2 className="w-3 h-3 animate-spin" />
+                                        {connecting ? (
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
                                         ) : (
-                                            <ExternalLink className="w-3 h-3" />
+                                            <Check className="w-3.5 h-3.5" />
                                         )}
-                                        Connect
+                                        {connecting ? "Connecting…" : `Connect ${TOOL_REGISTRY.find(t => t.id === selectedTool)?.name}`}
                                     </button>
                                 )}
                             </div>
-                        );
-                    })}
-                </div>
+                        )}
+                    </div>
+                )}
+
+                {/* OAuth Panel */}
+                {activeTab === "oauth" && (
+                    <div className="flex flex-col gap-1 p-3 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                        {TOOL_REGISTRY.map((tool) => {
+                            const connected = isConnected(tool.id);
+                            const iconUrl = getBrandIconUrl(tool.id);
+                            const isOAuthBusy = oauthBusy === tool.id;
+                            const isDisconnectingThis = disconnecting === tool.id;
+                            const busy = isOAuthBusy || isDisconnectingThis;
+
+                            return (
+                                <div
+                                    key={tool.id}
+                                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-accent/50 transition-colors"
+                                >
+                                    <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                        {iconUrl ? (
+                                            // eslint-disable-next-line @next/next/no-img-element
+                                            <img src={iconUrl} alt={tool.name} width={20} height={20} className="object-contain" />
+                                        ) : (
+                                            <span className="text-xs font-bold text-muted-foreground">{tool.name[0]}</span>
+                                        )}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-foreground">{tool.name}</p>
+                                        {connected ? (
+                                            <p className="text-xs text-emerald-500 flex items-center gap-1">
+                                                <CheckCircle2 className="w-3 h-3" /> Connected
+                                            </p>
+                                        ) : (
+                                            <p className="text-xs text-muted-foreground">Not connected</p>
+                                        )}
+                                    </div>
+                                    {connected ? (
+                                        <button
+                                            onClick={() => handleDisconnect(tool.id)}
+                                            disabled={busy}
+                                            className="text-xs px-3 py-1.5 rounded-lg bg-destructive/10 text-destructive hover:bg-destructive hover:text-white transition-colors disabled:opacity-50 flex items-center gap-1"
+                                        >
+                                            {isDisconnectingThis ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+                                            Disconnect
+                                        </button>
+                                    ) : (
+                                        <button
+                                            onClick={() => handleOAuthConnect(tool.id)}
+                                            disabled={busy}
+                                            className="text-xs px-3 py-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-1"
+                                        >
+                                            {isOAuthBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <ExternalLink className="w-3 h-3" />}
+                                            Connect
+                                        </button>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
 
                 {/* Footer */}
                 <div className="px-5 py-3 border-t border-border">
                     <p className="text-xs text-muted-foreground text-center">
-                        You&apos;ll be redirected to the tool&apos;s OAuth page to authorise access.
+                        {activeTab === "apikey"
+                            ? "Credentials are encrypted and stored securely."
+                            : "You'll be redirected to the tool's OAuth page to authorise access."}
                     </p>
                 </div>
             </div>
