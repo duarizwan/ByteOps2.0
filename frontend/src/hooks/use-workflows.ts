@@ -111,6 +111,9 @@ export function useWorkflows() {
         if (res.ok) {
             setWorkflows((prev) => prev.filter((w) => w.id !== id));
         }
+        // No fetch_(true) fallback on failure: deleted items are gone from the
+        // server regardless; the next poll will reconcile if needed.
+        return res.ok;
     }, [getToken]);
 
     return {
