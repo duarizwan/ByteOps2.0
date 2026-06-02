@@ -50,6 +50,39 @@ interface SyncStatus {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+const WORKFLOW_SUGGESTIONS = [
+    {
+        id: "morning-briefing",
+        title: "Morning briefing",
+        description: "Every morning, summarize Gmail and Slack, then list anything urgent",
+        prompt: "Create a workflow that runs every morning, summarizes my Gmail and Slack messages, and lists anything urgent.",
+    },
+    {
+        id: "meeting-prep",
+        title: "Meeting prep",
+        description: "Before each calendar event, research the topic and prepare talking points",
+        prompt: "Create a workflow that runs before each calendar event to research the topic and prepare talking points.",
+    },
+    {
+        id: "weekly-status",
+        title: "Weekly status report",
+        description: "Every Friday, summarize completed tasks and draft a team status update",
+        prompt: "Create a workflow that runs every Friday, summarizes my completed tasks, and drafts a team status update.",
+    },
+    {
+        id: "slack-mentions",
+        title: "Slack mention tracker",
+        description: "When Slack messages mention me, summarize and add to my task list",
+        prompt: "Create a workflow that runs when Slack messages mention me, summarizes them, and adds action items to my task list.",
+    },
+    {
+        id: "eod-winddown",
+        title: "End-of-day wind-down",
+        description: "At 5pm, review tomorrow's calendar and send a prep summary to my email",
+        prompt: "Create a workflow that runs at 5pm every day, reviews my calendar for tomorrow, and sends a prep summary to my email.",
+    },
+] as const;
+
 function useSyncStatus() {
     // Use the proper Clerk React hook — avoids the window.Clerk.session race
     // condition that sends stale/missing tokens on first render.
@@ -334,6 +367,67 @@ function NotificationSkeleton() {
                     <div className="h-3 bg-accent rounded w-1/2" />
                 </div>
             ))}
+        </div>
+    );
+}
+
+function WorkflowSuggestionModal({
+    onClose,
+    onSelect,
+}: {
+    onClose: () => void;
+    onSelect: (prompt: string) => void;
+}) {
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            if (e.key === "Escape") onClose();
+        };
+        document.addEventListener("keydown", handler);
+        return () => document.removeEventListener("keydown", handler);
+    }, [onClose]);
+
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+            onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+        >
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-label="Choose a workflow to build"
+                className="bg-card border border-border rounded-2xl w-full max-w-md mx-4 shadow-xl overflow-hidden"
+            >
+                {/* Header */}
+                <div className="px-5 py-4 border-b border-border">
+                    <h3 className="text-sm font-semibold text-foreground">Choose a workflow to build</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">Pick one to get started — or describe your own in chat.</p>
+                </div>
+
+                {/* Suggestions */}
+                <div className="p-3 flex flex-col gap-2">
+                    {WORKFLOW_SUGGESTIONS.map((s) => (
+                        <button
+                            key={s.id}
+                            onClick={() => { onSelect(s.prompt); onClose(); }}
+                            className="w-full text-left px-4 py-3 rounded-xl border border-border bg-background hover:border-primary hover:bg-primary/5 transition-colors group"
+                        >
+                            <p className="text-sm font-medium text-foreground group-hover:text-primary">{s.title}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">{s.description}</p>
+                        </button>
+                    ))}
+                </div>
+
+                {/* Footer */}
+                <div className="px-5 py-3 border-t border-border flex justify-end">
+                    <button
+                        aria-label="Close"
+                        onClick={onClose}
+                        className="h-8 px-4 rounded-lg text-xs text-muted-foreground hover:text-foreground border border-border hover:bg-accent transition-colors"
+                    >
+                        Cancel
+                    </button>
+                </div>
+            </div>
         </div>
     );
 }
