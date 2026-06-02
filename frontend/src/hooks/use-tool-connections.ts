@@ -141,10 +141,31 @@ export function useToolConnections() {
         [getToken, fetchConnections]
     );
 
+    const connectViaApiKey = useCallback(
+        async (tool: ToolType, credentials: Record<string, string>) => {
+            const token = await getToken();
+            if (!token) throw new Error("You must be signed in to connect tools");
+            const res = await fetch(`${API_BASE}/api/auth/${tool}/connect-apikey`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ credentials }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ detail: res.statusText }));
+                throw new Error(err.detail ?? `Failed to connect ${tool}`);
+            }
+            await fetchConnections();
+        },
+        [getToken, fetchConnections]
+    );
+
     const isConnected = useCallback(
         (tool: ToolType) => connections.some((c) => c.tool_type === tool && c.status === "connected"),
         [connections]
     );
 
-    return { connections, loading, error, isConnected, initiateConnect, disconnect, silentRefresh, refetch: fetchConnections };
+    return { connections, loading, error, isConnected, initiateConnect, disconnect, silentRefresh, refetch: fetchConnections, connectViaApiKey };
 }

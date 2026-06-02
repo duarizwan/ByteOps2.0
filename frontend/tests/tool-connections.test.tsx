@@ -116,6 +116,81 @@ describe("Calendar connection — initiateConnect (T011)", () => {
     });
 });
 
+// ── connectViaApiKey isolated logic ──────────────────────────────────────────
+// Mirrors the hook's connectViaApiKey implementation for isolated testing.
+
+async function connectViaApiKey(
+    tool: string,
+    credentials: Record<string, string>,
+    getToken: () => Promise<string | null>,
+    fetchConnections: () => Promise<void>
+): Promise<void> {
+    const token = await getToken();
+    if (!token) throw new Error("You must be signed in to connect tools");
+    const res = await fetch(`${API_BASE}/api/auth/${tool}/connect-apikey`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ credentials }),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: (res as any).statusText }));
+        throw new Error(err.detail ?? `Failed to connect ${tool}`);
+    }
+    await fetchConnections();
+}
+
+describe("connectViaApiKey", () => {
+    let fetchSpy: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+        fetchSpy = vi.fn();
+        global.fetch = fetchSpy as unknown as typeof fetch;
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it("calls connect-apikey endpoint and refreshes connections on success", async () => {
+        fetchSpy
+            .mockResolvedValueOnce(
+                makeRes(true, { status: "connected", tool_type: "github" })
+            )
+            .mockResolvedValueOnce(makeRes(true, [])); // fetchConnections after success
+
+        const fetchConnections = vi.fn().mockResolvedValue(undefined);
+
+        await connectViaApiKey("github", { token: "ghp_test" }, getToken, fetchConnections);
+
+        expect(fetchSpy).toHaveBeenCalledWith(
+            `${API_BASE}/api/auth/github/connect-apikey`,
+            expect.objectContaining({
+                method: "POST",
+                headers: expect.objectContaining({ Authorization: "Bearer test-token" }),
+                body: JSON.stringify({ credentials: { token: "ghp_test" } }),
+            })
+        );
+        expect(fetchConnections).toHaveBeenCalledTimes(1);
+    });
+
+    it("throws when connect-apikey returns non-ok response", async () => {
+        fetchSpy.mockResolvedValueOnce(
+            makeRes(false, { detail: "Invalid GitHub token" }, 422)
+        );
+
+        const fetchConnections = vi.fn().mockResolvedValue(undefined);
+
+        await expect(
+            connectViaApiKey("github", { token: "bad" }, getToken, fetchConnections)
+        ).rejects.toThrow("Invalid GitHub token");
+
+        expect(fetchConnections).not.toHaveBeenCalled();
+    });
+});
+
 // ── Public hook API contract ──────────────────────────────────────────────────
 // Verify the exports without rendering to avoid OOM from polling timers.
 
