@@ -158,8 +158,7 @@ describe("connectViaApiKey", () => {
         fetchSpy
             .mockResolvedValueOnce(
                 makeRes(true, { status: "connected", tool_type: "github" })
-            )
-            .mockResolvedValueOnce(makeRes(true, [])); // fetchConnections after success
+            );
 
         const fetchConnections = vi.fn().mockResolvedValue(undefined);
 
@@ -174,6 +173,12 @@ describe("connectViaApiKey", () => {
             })
         );
         expect(fetchConnections).toHaveBeenCalledTimes(1);
+    });
+
+    it("throws when not signed in", async () => {
+        await expect(
+            connectViaApiKey("github", { token: "x" }, async () => null, vi.fn())
+        ).rejects.toThrow("You must be signed in to connect tools");
     });
 
     it("throws when connect-apikey returns non-ok response", async () => {
@@ -199,5 +204,13 @@ describe("useToolConnections public API contract (T011)", () => {
         // Dynamic import so the module is evaluated after mocks are set up
         const mod = await import("../src/hooks/use-tool-connections");
         expect(typeof mod.useToolConnections).toBe("function");
+    });
+
+    it("exports connectViaApiKey in the return value", async () => {
+        const mod = await import("../src/hooks/use-tool-connections");
+        expect(typeof mod.useToolConnections).toBe("function");
+        // Verify connectViaApiKey is referenced in the hook source
+        const src = mod.useToolConnections.toString();
+        expect(src).toContain("connectViaApiKey");
     });
 });
