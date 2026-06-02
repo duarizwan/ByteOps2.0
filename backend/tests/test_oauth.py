@@ -217,3 +217,120 @@ async def test_user_sync_endpoint():
     assert resp.status_code in (200, 422)
 
     app.dependency_overrides.clear()
+
+
+# ── API Key connection tests ──────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_connect_apikey_github_valid():
+    """Valid GitHub PAT → 200 connected."""
+    from app.core.auth import get_current_clerk_user
+    from app.core.database import get_db
+    from unittest.mock import MagicMock
+
+    execute_result = MagicMock()
+    execute_result.scalar_one_or_none.return_value = None
+
+    mock_db_session = AsyncMock()
+    mock_db_session.execute = AsyncMock(return_value=execute_result)
+    mock_db_session.add = AsyncMock()
+    mock_db_session.commit = AsyncMock()
+
+    async def mock_db_dep():
+        yield mock_db_session
+
+    mock_gh_response = AsyncMock()
+    mock_gh_response.status_code = 200
+
+    app.dependency_overrides[get_current_clerk_user] = _mock_get_current_user
+    app.dependency_overrides[get_db] = mock_db_dep
+
+    with (
+        patch("httpx.AsyncClient.get", return_value=mock_gh_response),
+        patch("app.api.oauth.trigger_immediate_sync"),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/auth/github/connect-apikey",
+                json={"credentials": {"token": "ghp_validtoken"}},
+                headers={"Authorization": "Bearer fake"},
+            )
+
+    app.dependency_overrides.clear()
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "connected"
+
+
+@pytest.mark.asyncio
+async def test_connect_apikey_github_invalid_token():
+    """Invalid GitHub PAT → 400."""
+    from app.core.auth import get_current_clerk_user
+    from app.core.database import get_db
+
+    mock_db_session = AsyncMock()
+
+    async def mock_db_dep():
+        yield mock_db_session
+
+    mock_gh_response = AsyncMock()
+    mock_gh_response.status_code = 401
+
+    app.dependency_overrides[get_current_clerk_user] = _mock_get_current_user
+    app.dependency_overrides[get_db] = mock_db_dep
+
+    with patch("httpx.AsyncClient.get", return_value=mock_gh_response):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/auth/github/connect-apikey",
+                json={"credentials": {"token": "bad"}},
+                headers={"Authorization": "Bearer fake"},
+            )
+
+    app.dependency_overrides.clear()
+    assert resp.status_code == 400
+    assert "Invalid GitHub token" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_connect_apikey_gmail_rejected():
+    """Gmail is OAuth-only → 400."""
+    from app.core.auth import get_current_clerk_user
+
+    app.dependency_overrides[get_current_clerk_user] = _mock_get_current_user
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/api/auth/gmail/connect-apikey",
+            json={"credentials": {"token": "x"}},
+            headers={"Authorization": "Bearer fake"},
+        )
+
+    app.dependency_overrides.clear()
+    assert resp.status_code == 400
+    assert "OAuth" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_connect_apikey_jira_missing_fields():
+    """Jira with missing workspace → 400."""
+    from app.core.auth import get_current_clerk_user
+    from app.core.database import get_db
+
+    mock_db_session = AsyncMock()
+
+    async def mock_db_dep():
+        yield mock_db_session
+
+    app.dependency_overrides[get_current_clerk_user] = _mock_get_current_user
+    app.dependency_overrides[get_db] = mock_db_dep
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/api/auth/jira/connect-apikey",
+            json={"credentials": {"email": "a@b.com", "token": "tok"}},
+            headers={"Authorization": "Bearer fake"},
+        )
+
+    app.dependency_overrides.clear()
+    assert resp.status_code == 400
+    assert "workspace" in resp.json()["detail"]

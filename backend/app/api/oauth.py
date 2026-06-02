@@ -9,8 +9,9 @@ from datetime import datetime, timezone
 from typing import Annotated
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,10 +20,15 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.tool_connection import ConnectionStatus, ToolConnection, ToolType
 from app.models.user import User
+from app.services.sync.scheduler import trigger_immediate_sync
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["oauth"])
+
+
+class ApiKeyCredentials(BaseModel):
+    credentials: dict[str, str]
 
 # ── PKCE helpers (required by Slack for http:// redirect URIs) ────────────────
 
@@ -133,8 +139,9 @@ def _build_provider(tool: ToolType) -> dict:
             "extra_params": {"audience": "api.atlassian.com", "prompt": "consent"},
         },
         ToolType.TRELLO: {
-            "auth_url": "https://trello.com/1/OAuthAuthorizeToken",
-            "token_url": "https://trello.com/1/OAuthGetAccessToken",
+            # Trello simplified token flow — returns token directly, no code exchange
+            "auth_url": "https://trello.com/1/authorize",
+            "token_url": None,
             "client_id": s.trello_api_key,
             "client_secret": s.trello_api_secret,
             "redirect_uri": s.trello_redirect_uri,
@@ -177,6 +184,27 @@ async def initiate_oauth(
     cfg = _build_provider(tool)
     state = secrets.token_urlsafe(32)
 
+    # Trello simplified flow: different param names, token returned directly.
+    # Nonce is embedded in the redirect path (not query string) because Trello appends
+    # ?token=TOKEN unconditionally — a query-param nonce would create a double-? URL
+    # that Python's URL parser collapses into one broken key, losing the token entirely.
+    if tool == ToolType.TRELLO:
+        nonce = secrets.token_urlsafe(16)
+        _pkce_store[nonce] = (str(current_user.id), _time.monotonic() + 600)
+        # Trello returns token as URL fragment (#token=...) which the server never sees.
+        # Point return_url at the frontend relay page; it reads the hash and POSTs to backend.
+        return_url = f"{_frontend_url()}/trello-callback?nonce={nonce}"
+        params = {
+            "key": cfg["client_id"],
+            "return_url": return_url,
+            "callback_method": "redirect",
+            "response_type": "token",
+            "scope": cfg["scopes"],
+            **cfg.get("extra_params", {}),
+        }
+        auth_url = f"{cfg['auth_url']}?{urlencode(params)}"
+        return {"auth_url": auth_url}
+
     params = {
         "client_id": cfg["client_id"],
         "redirect_uri": cfg["redirect_uri"],
@@ -201,23 +229,111 @@ async def initiate_oauth(
 # Callback — exchange code for tokens, persist connection
 # ──────────────────────────────────────────────────────────────────────────────
 
+@router.get("/trello/callback/{nonce}")
+async def trello_callback(
+    nonce: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    background_tasks: BackgroundTasks,
+    token: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+) -> RedirectResponse:
+    """Trello-specific callback: nonce in path, token appended as ?token=TOKEN by Trello."""
+    import uuid
+
+    if error:
+        return RedirectResponse(url=f"{_frontend_url()}/settings?error={error}&tool=trello")
+
+    logger.info("Trello callback received — nonce=%s has_token=%s", nonce, bool(token))
+    if not token:
+        logger.warning("Trello callback missing token for nonce=%s", nonce)
+        return RedirectResponse(url=f"{_frontend_url()}/settings?error=trello_missing_token&tool=trello")
+
+    entry = _pkce_store.pop(nonce, None)
+    if not entry or _time.monotonic() > entry[1]:
+        return RedirectResponse(url=f"{_frontend_url()}/settings?error=trello_state_expired&tool=trello")
+
+    try:
+        user_id = uuid.UUID(entry[0])
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid Trello state")
+
+    return await _complete_trello_connection(user_id, token, db, background_tasks)
+
+
+async def _complete_trello_connection(
+    user_id,
+    token: str,
+    db: AsyncSession,
+    background_tasks: BackgroundTasks,
+) -> RedirectResponse:
+    """Shared logic to persist a Trello connection and redirect to settings."""
+    from sqlalchemy import select
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    cfg = _build_provider(ToolType.TRELLO)
+    existing = await db.execute(
+        select(ToolConnection).where(
+            ToolConnection.user_id == user_id,
+            ToolConnection.tool_type == ToolType.TRELLO,
+        )
+    )
+    connection = existing.scalar_one_or_none()
+    now = datetime.now(timezone.utc)
+
+    if connection:
+        connection.access_token = token
+        connection.scopes = cfg["scopes"]
+        connection.status = ConnectionStatus.CONNECTED
+        connection.updated_at = now
+    else:
+        connection = ToolConnection(
+            user_id=user_id,
+            tool_type=ToolType.TRELLO,
+            access_token=token,
+            refresh_token=None,
+            token_expires_at=None,
+            scopes=cfg["scopes"],
+            status=ConnectionStatus.CONNECTED,
+        )
+        db.add(connection)
+
+    await db.commit()
+
+    from app.services.sync.scheduler import trigger_immediate_sync
+    background_tasks.add_task(trigger_immediate_sync, user_id=user_id, tool_type=ToolType.TRELLO)
+
+    return RedirectResponse(url=f"{_frontend_url()}/settings?connected=trello")
+
+
 @router.get("/{tool}/callback")
 async def oauth_callback(
     tool: ToolType,
     db: Annotated[AsyncSession, Depends(get_db)],
     background_tasks: BackgroundTasks,
-    code: str = Query(...),
-    state: str = Query(...),
+    request: Request,
+    code: str | None = Query(default=None),
+    state: str | None = Query(default=None),
     error: str | None = Query(default=None),
 ) -> RedirectResponse:
     """Handle the OAuth2 callback: exchange code → tokens, upsert ToolConnection."""
     if error:
         return RedirectResponse(url=f"{_frontend_url()}/settings?error={error}&tool={tool}")
 
+    import uuid
+
+    if tool == ToolType.TRELLO:
+        # Should not reach here — Trello uses /trello/callback/{nonce} route.
+        return RedirectResponse(url=f"{_frontend_url()}/settings?error=trello_wrong_route&tool=trello")
+
+    if not code:
+        return RedirectResponse(url=f"{_frontend_url()}/settings?error=missing_code&tool={tool}")
     # Parse user_id and nonce from state
     try:
-        user_id_str, state_nonce = state.split(":", 1)
-        import uuid
+        user_id_str, state_nonce = (state or "").split(":", 1)
         user_id = uuid.UUID(user_id_str)
     except (ValueError, AttributeError):
         raise HTTPException(status_code=400, detail="Invalid OAuth2 state parameter")
@@ -395,6 +511,156 @@ async def refresh_tool_token(
     )
 
     return {"refreshed": True}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# API Key connection — validate credentials then upsert ToolConnection
+# ──────────────────────────────────────────────────────────────────────────────
+
+_APIKEY_SUPPORTED = {ToolType.GITHUB, ToolType.JIRA, ToolType.SLACK, ToolType.TRELLO, ToolType.DROPBOX}
+
+
+async def _validate_apikey_credentials(tool: ToolType, creds: dict[str, str]) -> None:
+    """Make a lightweight test call to confirm credentials are valid. Raises HTTPException on failure."""
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        if tool == ToolType.GITHUB:
+            token = creds.get("token", "")
+            if not token:
+                raise HTTPException(status_code=400, detail="token is required")
+            resp = await client.get(
+                "https://api.github.com/user",
+                headers={"Authorization": f"token {token}", "Accept": "application/vnd.github+json"},
+            )
+            if resp.status_code == 401:
+                raise HTTPException(status_code=400, detail="Invalid GitHub token")
+            if resp.status_code != 200:
+                raise HTTPException(status_code=400, detail=f"GitHub API error: {resp.status_code}")
+
+        elif tool == ToolType.JIRA:
+            workspace = creds.get("workspace", "").strip().rstrip("/")
+            email = creds.get("email", "")
+            token = creds.get("token", "")
+            if not workspace:
+                raise HTTPException(status_code=400, detail="workspace is required")
+            if not email or not token:
+                raise HTTPException(status_code=400, detail="email and token are required")
+            import base64 as _b64
+            auth = _b64.b64encode(f"{email}:{token}".encode()).decode()
+            resp = await client.get(
+                f"https://{workspace}/rest/api/3/myself",
+                headers={"Authorization": f"Basic {auth}", "Accept": "application/json"},
+            )
+            if resp.status_code == 401:
+                raise HTTPException(status_code=400, detail="Invalid Jira credentials — check email and token")
+            if resp.status_code != 200:
+                raise HTTPException(status_code=400, detail=f"Jira API error: {resp.status_code}")
+
+        elif tool == ToolType.SLACK:
+            token = creds.get("token", "")
+            if not token:
+                raise HTTPException(status_code=400, detail="token is required")
+            resp = await client.post(
+                "https://slack.com/api/auth.test",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            data = resp.json()
+            if not data.get("ok"):
+                raise HTTPException(status_code=400, detail=f"Invalid Slack token: {data.get('error', 'unknown')}")
+
+        elif tool == ToolType.TRELLO:
+            api_key = creds.get("api_key", "")
+            token = creds.get("token", "")
+            if not api_key or not token:
+                raise HTTPException(status_code=400, detail="api_key and token are required")
+            resp = await client.get(
+                f"https://api.trello.com/1/members/me?key={api_key}&token={token}",
+            )
+            if resp.status_code == 401:
+                raise HTTPException(status_code=400, detail="Invalid Trello credentials")
+            if resp.status_code != 200:
+                raise HTTPException(status_code=400, detail=f"Trello API error: {resp.status_code}")
+
+        elif tool == ToolType.DROPBOX:
+            token = creds.get("token", "")
+            if not token:
+                raise HTTPException(status_code=400, detail="token is required")
+            resp = await client.post(
+                "https://api.dropboxapi.com/2/users/get_current_account",
+                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                content=b"null",
+            )
+            if resp.status_code == 401:
+                raise HTTPException(status_code=400, detail="Invalid Dropbox token")
+            if resp.status_code != 200:
+                raise HTTPException(status_code=400, detail=f"Dropbox API error: {resp.status_code}")
+
+
+def _extract_token_and_metadata(tool: ToolType, creds: dict[str, str]) -> tuple[str, dict]:
+    """Return (access_token_to_store, metadata_dict) from raw credentials."""
+    if tool == ToolType.JIRA:
+        return creds["token"], {
+            "auth_method": "apikey",
+            "workspace": creds["workspace"].strip().rstrip("/"),
+            "email": creds["email"],
+        }
+    if tool == ToolType.TRELLO:
+        return creds["token"], {"auth_method": "apikey", "api_key": creds["api_key"]}
+    return creds["token"], {"auth_method": "apikey"}
+
+
+@router.post("/{tool}/connect-apikey")
+async def connect_tool_apikey(
+    tool: ToolType,
+    body: ApiKeyCredentials,
+    current_user: Annotated[User, Depends(get_current_clerk_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    background_tasks: BackgroundTasks,
+) -> dict:
+    """Connect a tool using a user-supplied API key / personal access token."""
+    if tool not in _APIKEY_SUPPORTED:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{tool} does not support API key auth. Use OAuth.",
+        )
+
+    await _validate_apikey_credentials(tool, body.credentials)
+    access_token, metadata = _extract_token_and_metadata(tool, body.credentials)
+
+    existing = await db.execute(
+        select(ToolConnection).where(
+            ToolConnection.user_id == current_user.id,
+            ToolConnection.tool_type == tool,
+        )
+    )
+    connection = existing.scalar_one_or_none()
+    now = datetime.now(timezone.utc)
+
+    if connection:
+        connection.access_token = access_token
+        connection.refresh_token = None
+        connection.token_expires_at = None
+        connection.scopes = None
+        connection.status = ConnectionStatus.CONNECTED
+        connection.updated_at = now
+        connection.metadata_ = metadata
+    else:
+        connection = ToolConnection(
+            user_id=current_user.id,
+            tool_type=tool,
+            access_token=access_token,
+            refresh_token=None,
+            token_expires_at=None,
+            scopes=None,
+            status=ConnectionStatus.CONNECTED,
+            metadata_=metadata,
+        )
+        db.add(connection)
+
+    await db.commit()
+
+    background_tasks.add_task(trigger_immediate_sync, user_id=current_user.id, tool_type=tool)
+
+    return {"status": "connected", "tool_type": tool}
 
 
 # ──────────────────────────────────────────────────────────────────────────────
