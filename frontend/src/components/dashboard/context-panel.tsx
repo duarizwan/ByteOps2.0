@@ -982,6 +982,7 @@ export function ContextPanel({ isCollapsed, onToggleCollapse, onRefreshRef, onSe
     const [taskDayFilter, setTaskDayFilter] = useState<TaskDayFilter>("today");
     const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
     const [runningWorkflowIds, setRunningWorkflowIds] = useState<Set<string>>(() => new Set());
+    const [showSuggestionModal, setShowSuggestionModal] = useState(false);
     const { notifications, unreadCount, isLoading, markRead, markAllRead, dismiss, refresh } =
         useNotifications();
     const {
@@ -1143,6 +1144,19 @@ export function ContextPanel({ isCollapsed, onToggleCollapse, onRefreshRef, onSe
                 {/* ── Workflows ── */}
                 {activeTab === "workflows" && (
                     <div className="space-y-3">
+                        {/* Sub-header: workflow count + generate button */}
+                        <div className="flex items-center justify-between pt-1 pb-0.5">
+                            <span className="text-xs text-muted-foreground">
+                                {workflowsLoading ? "" : `${workflows.length} workflow${workflows.length === 1 ? "" : "s"}`}
+                            </span>
+                            <button
+                                onClick={() => setShowSuggestionModal(true)}
+                                className="h-7 px-2.5 rounded-lg flex items-center gap-1.5 text-xs bg-primary/10 hover:bg-primary/15 text-primary transition-colors"
+                            >
+                                <Sparkles className="w-3 h-3" />
+                                Generate with AI
+                            </button>
+                        </div>
                         {workflowsLoading ? (
                             <NotificationSkeleton />
                         ) : workflows.length === 0 ? (
@@ -1319,6 +1333,12 @@ export function ContextPanel({ isCollapsed, onToggleCollapse, onRefreshRef, onSe
                                     </div>
                                 )}
                             </>
+                        )}
+                        {showSuggestionModal && (
+                            <WorkflowSuggestionModal
+                                onClose={() => setShowSuggestionModal(false)}
+                                onSelect={(prompt) => onSendToAI?.(prompt)}
+                            />
                         )}
                     </div>
                 )}
