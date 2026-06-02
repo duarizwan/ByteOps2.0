@@ -106,6 +106,13 @@ export function useWorkflows() {
         else await fetch_(true);
     }, [fetch_, getToken, replaceWorkflow]);
 
+    const deleteWorkflow = useCallback(async (id: string) => {
+        const res = await authFetch(`/api/workflows/${id}`, getToken, { method: "DELETE" });
+        if (res.ok) {
+            setWorkflows((prev) => prev.filter((w) => w.id !== id));
+        }
+    }, [getToken]);
+
     return {
         workflows,
         isLoading,
@@ -114,5 +121,6 @@ export function useWorkflows() {
         pause,
         resume,
         runNow,
+        deleteWorkflow,
     };
 }
