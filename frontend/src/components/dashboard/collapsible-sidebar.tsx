@@ -317,11 +317,15 @@ function ConnectToolModal({ onClose }: { onClose: () => void }) {
     const [error, setError] = useState<string | null>(null);
     const [successTool, setSuccessTool] = useState<ToolType | null>(null);
     const overlayRef = useRef<HTMLDivElement>(null);
+    const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
         document.addEventListener("keydown", onKey);
-        return () => document.removeEventListener("keydown", onKey);
+        return () => {
+            document.removeEventListener("keydown", onKey);
+            if (successTimerRef.current) clearTimeout(successTimerRef.current);
+        };
     }, [onClose]);
 
     const handleSelectTool = (toolId: ToolType) => {
@@ -340,7 +344,7 @@ function ConnectToolModal({ onClose }: { onClose: () => void }) {
         try {
             await connectViaApiKey(selectedTool, credentials);
             setSuccessTool(selectedTool);
-            setTimeout(onClose, 1200);
+            successTimerRef.current = setTimeout(onClose, 1200);
         } catch (err) {
             setError(err instanceof Error ? err.message : `Failed to connect ${selectedTool}`);
         } finally {
@@ -394,6 +398,7 @@ function ConnectToolModal({ onClose }: { onClose: () => void }) {
                     </div>
                     <button
                         onClick={onClose}
+                        aria-label="Close"
                         className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
                     >
                         <X className="w-4 h-4" />
@@ -401,8 +406,12 @@ function ConnectToolModal({ onClose }: { onClose: () => void }) {
                 </div>
 
                 {/* Tabs */}
-                <div className="flex border-b border-border">
+                <div className="flex border-b border-border" role="tablist">
                     <button
+                        role="tab"
+                        aria-selected={activeTab === "apikey"}
+                        aria-controls="panel-apikey"
+                        id="tab-apikey"
                         onClick={() => setActiveTab("apikey")}
                         className={cn(
                             "flex-1 py-2.5 text-xs font-medium transition-colors border-b-2",
@@ -414,6 +423,10 @@ function ConnectToolModal({ onClose }: { onClose: () => void }) {
                         API Key
                     </button>
                     <button
+                        role="tab"
+                        aria-selected={activeTab === "oauth"}
+                        aria-controls="panel-oauth"
+                        id="tab-oauth"
                         onClick={() => setActiveTab("oauth")}
                         className={cn(
                             "flex-1 py-2.5 text-xs font-medium transition-colors border-b-2",
@@ -431,7 +444,7 @@ function ConnectToolModal({ onClose }: { onClose: () => void }) {
                     <div className="mx-4 mt-3 flex items-start gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded-xl">
                         <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                         <span className="flex-1">{error}</span>
-                        <button onClick={() => setError(null)} className="flex-shrink-0 hover:opacity-70">
+                        <button onClick={() => setError(null)} aria-label="Dismiss error" className="flex-shrink-0 hover:opacity-70">
                             <X className="w-3.5 h-3.5" />
                         </button>
                     </div>
@@ -439,7 +452,7 @@ function ConnectToolModal({ onClose }: { onClose: () => void }) {
 
                 {/* API Key Panel */}
                 {activeTab === "apikey" && (
-                    <div className="p-4 flex flex-col gap-4 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                    <div role="tabpanel" id="panel-apikey" aria-labelledby="tab-apikey" className="p-4 flex flex-col gap-4 max-h-[60vh] overflow-y-auto custom-scrollbar">
                         {/* Tool chip selector */}
                         <div>
                             <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">Platform</p>
@@ -451,12 +464,11 @@ function ConnectToolModal({ onClose }: { onClose: () => void }) {
                                         <button
                                             key={tool.id}
                                             onClick={() => handleSelectTool(tool.id)}
-                                            disabled={isOAuthOnly}
                                             title={isOAuthOnly ? `${tool.name} requires OAuth` : undefined}
                                             className={cn(
                                                 "flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-colors",
                                                 isOAuthOnly
-                                                    ? "opacity-40 cursor-not-allowed border-border text-muted-foreground"
+                                                    ? "opacity-40 cursor-pointer border-border text-muted-foreground"
                                                     : selectedTool === tool.id
                                                     ? "border-primary bg-primary/10 text-primary"
                                                     : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
@@ -524,7 +536,7 @@ function ConnectToolModal({ onClose }: { onClose: () => void }) {
                                         ) : (
                                             <Check className="w-3.5 h-3.5" />
                                         )}
-                                        {connecting ? "Connecting…" : `Connect ${TOOL_REGISTRY.find(t => t.id === selectedTool)?.name}`}
+                                        {connecting ? "Connecting…" : `Connect ${TOOL_REGISTRY.find(t => t.id === selectedTool)?.name ?? selectedTool}`}
                                     </button>
                                 )}
                             </div>
@@ -534,7 +546,7 @@ function ConnectToolModal({ onClose }: { onClose: () => void }) {
 
                 {/* OAuth Panel */}
                 {activeTab === "oauth" && (
-                    <div className="flex flex-col gap-1 p-3 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                    <div role="tabpanel" id="panel-oauth" aria-labelledby="tab-oauth" className="flex flex-col gap-1 p-3 max-h-[60vh] overflow-y-auto custom-scrollbar">
                         {TOOL_REGISTRY.map((tool) => {
                             const connected = isConnected(tool.id);
                             const iconUrl = getBrandIconUrl(tool.id);
