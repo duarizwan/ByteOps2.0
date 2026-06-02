@@ -245,20 +245,21 @@ async def test_connect_apikey_github_valid():
     app.dependency_overrides[get_current_clerk_user] = _mock_get_current_user
     app.dependency_overrides[get_db] = mock_db_dep
 
-    with (
-        patch("httpx.AsyncClient.get", return_value=mock_gh_response),
-        patch("app.api.oauth.trigger_immediate_sync"),
-    ):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.post(
-                "/api/auth/github/connect-apikey",
-                json={"credentials": {"token": "ghp_validtoken"}},
-                headers={"Authorization": "Bearer fake"},
-            )
-
-    app.dependency_overrides.clear()
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "connected"
+    try:
+        with (
+            patch("httpx.AsyncClient.get", return_value=mock_gh_response),
+            patch("app.api.oauth.trigger_immediate_sync"),
+        ):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                resp = await client.post(
+                    "/api/auth/github/connect-apikey",
+                    json={"credentials": {"token": "ghp_validtoken"}},
+                    headers={"Authorization": "Bearer fake"},
+                )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "connected"
+    finally:
+        app.dependency_overrides.clear()
 
 
 @pytest.mark.asyncio
@@ -278,17 +279,18 @@ async def test_connect_apikey_github_invalid_token():
     app.dependency_overrides[get_current_clerk_user] = _mock_get_current_user
     app.dependency_overrides[get_db] = mock_db_dep
 
-    with patch("httpx.AsyncClient.get", return_value=mock_gh_response):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.post(
-                "/api/auth/github/connect-apikey",
-                json={"credentials": {"token": "bad"}},
-                headers={"Authorization": "Bearer fake"},
-            )
-
-    app.dependency_overrides.clear()
-    assert resp.status_code == 400
-    assert "Invalid GitHub token" in resp.json()["detail"]
+    try:
+        with patch("httpx.AsyncClient.get", return_value=mock_gh_response):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                resp = await client.post(
+                    "/api/auth/github/connect-apikey",
+                    json={"credentials": {"token": "bad"}},
+                    headers={"Authorization": "Bearer fake"},
+                )
+        assert resp.status_code == 400
+        assert "Invalid GitHub token" in resp.json()["detail"]
+    finally:
+        app.dependency_overrides.clear()
 
 
 @pytest.mark.asyncio
@@ -298,16 +300,17 @@ async def test_connect_apikey_gmail_rejected():
 
     app.dependency_overrides[get_current_clerk_user] = _mock_get_current_user
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.post(
-            "/api/auth/gmail/connect-apikey",
-            json={"credentials": {"token": "x"}},
-            headers={"Authorization": "Bearer fake"},
-        )
-
-    app.dependency_overrides.clear()
-    assert resp.status_code == 400
-    assert "OAuth" in resp.json()["detail"]
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/auth/gmail/connect-apikey",
+                json={"credentials": {"token": "x"}},
+                headers={"Authorization": "Bearer fake"},
+            )
+        assert resp.status_code == 400
+        assert "OAuth" in resp.json()["detail"]
+    finally:
+        app.dependency_overrides.clear()
 
 
 @pytest.mark.asyncio
@@ -324,13 +327,14 @@ async def test_connect_apikey_jira_missing_fields():
     app.dependency_overrides[get_current_clerk_user] = _mock_get_current_user
     app.dependency_overrides[get_db] = mock_db_dep
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.post(
-            "/api/auth/jira/connect-apikey",
-            json={"credentials": {"email": "a@b.com", "token": "tok"}},
-            headers={"Authorization": "Bearer fake"},
-        )
-
-    app.dependency_overrides.clear()
-    assert resp.status_code == 400
-    assert "workspace" in resp.json()["detail"]
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/auth/jira/connect-apikey",
+                json={"credentials": {"email": "a@b.com", "token": "tok"}},
+                headers={"Authorization": "Bearer fake"},
+            )
+        assert resp.status_code == 400
+        assert "workspace" in resp.json()["detail"]
+    finally:
+        app.dependency_overrides.clear()

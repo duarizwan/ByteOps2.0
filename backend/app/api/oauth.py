@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Annotated
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -267,8 +267,6 @@ async def _complete_trello_connection(
     background_tasks: BackgroundTasks,
 ) -> RedirectResponse:
     """Shared logic to persist a Trello connection and redirect to settings."""
-    from sqlalchemy import select
-
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
@@ -303,7 +301,6 @@ async def _complete_trello_connection(
 
     await db.commit()
 
-    from app.services.sync.scheduler import trigger_immediate_sync
     background_tasks.add_task(trigger_immediate_sync, user_id=user_id, tool_type=ToolType.TRELLO)
 
     return RedirectResponse(url=f"{_frontend_url()}/settings?connected=trello")
@@ -314,7 +311,6 @@ async def oauth_callback(
     tool: ToolType,
     db: Annotated[AsyncSession, Depends(get_db)],
     background_tasks: BackgroundTasks,
-    request: Request,
     code: str | None = Query(default=None),
     state: str | None = Query(default=None),
     error: str | None = Query(default=None),
@@ -448,7 +444,6 @@ async def oauth_callback(
     await db.commit()
 
     # Fire background sync immediately (non-blocking)
-    from app.services.sync.scheduler import trigger_immediate_sync
     background_tasks.add_task(
         trigger_immediate_sync,
         user_id=user_id,
@@ -503,7 +498,6 @@ async def refresh_tool_token(
         connection.status = ConnectionStatus.CONNECTED
         await db.commit()
 
-    from app.services.sync.scheduler import trigger_immediate_sync
     background_tasks.add_task(
         trigger_immediate_sync,
         user_id=current_user.id,
@@ -544,8 +538,7 @@ async def _validate_apikey_credentials(tool: ToolType, creds: dict[str, str]) ->
                 raise HTTPException(status_code=400, detail="workspace is required")
             if not email or not token:
                 raise HTTPException(status_code=400, detail="email and token are required")
-            import base64 as _b64
-            auth = _b64.b64encode(f"{email}:{token}".encode()).decode()
+            auth = base64.b64encode(f"{email}:{token}".encode()).decode()
             resp = await client.get(
                 f"https://{workspace}/rest/api/3/myself",
                 headers={"Authorization": f"Basic {auth}", "Accept": "application/json"},
@@ -563,6 +556,8 @@ async def _validate_apikey_credentials(tool: ToolType, creds: dict[str, str]) ->
                 "https://slack.com/api/auth.test",
                 headers={"Authorization": f"Bearer {token}"},
             )
+            if resp.status_code not in (200, 400):
+                raise HTTPException(status_code=400, detail=f"Slack API error: {resp.status_code}")
             data = resp.json()
             if not data.get("ok"):
                 raise HTTPException(status_code=400, detail=f"Invalid Slack token: {data.get('error', 'unknown')}")
