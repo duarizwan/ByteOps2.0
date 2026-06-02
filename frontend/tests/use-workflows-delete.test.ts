@@ -1,82 +1,104 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { renderHook, act, waitFor } from "@testing-library/react";
+import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
-/**
- * useWorkflows — deleteWorkflow test
- *
- * Tests that the hook exports deleteWorkflow and it correctly:
- * 1. Calls DELETE /api/workflows/:id with auth header
- * 2. Filters out the deleted workflow from state on success
- * 3. Leaves state unchanged on failure
- *
- * We test via exported function re-implementation to avoid jsdom polling timers
- * (similar to tool-connections.test.tsx pattern)
- */
+// Use a stable getToken reference so the useCallback([getToken]) in the hook
+// does not create a new fetch_ function on every render (which would cause an
+// infinite re-render loop via the useEffect([fetch_]) dependency).
+const stableGetToken = async () => "test-token";
 
-const API_BASE = "http://localhost:8000";
+vi.mock("@clerk/nextjs", () => ({
+    useAuth: () => ({ getToken: stableGetToken }),
+}));
 
-// This mirrors exactly what deleteWorkflow in use-workflows.ts should do
-async function deleteWorkflowImpl(
-    id: string,
-    getToken: () => Promise<string | null>
-): Promise<{ ok: boolean }> {
-    const token = await getToken();
-    const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-    };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-
-    const res = await fetch(`${API_BASE}/api/workflows/${id}`, {
-        method: "DELETE",
-        headers,
-    });
-
-    return { ok: res.ok };
-}
-
-const getToken = () => Promise.resolve("test-token");
+const mockWorkflows = [
+    { id: "wf-1", name: "Morning Briefing", status: "active", trigger: {}, actions: [], trigger_label: "daily", condition_summary: "", action_summary: "", action_count: 1, last_run_at: null, next_run_at: null, last_error: null, description: null },
+    { id: "wf-2", name: "Weekly Report", status: "paused", trigger: {}, actions: [], trigger_label: "weekly", condition_summary: "", action_summary: "", action_count: 1, last_run_at: null, next_run_at: null, last_error: null, description: null },
+];
 
 describe("useWorkflows — deleteWorkflow", () => {
-    let fetchSpy: ReturnType<typeof vi.fn>;
-
     beforeEach(() => {
-        fetchSpy = vi.fn();
-        global.fetch = fetchSpy as unknown as typeof fetch;
+        vi.stubGlobal("fetch", vi.fn());
     });
 
     afterEach(() => {
         vi.restoreAllMocks();
+        vi.unstubAllGlobals();
+    });
+
+    it("removes the workflow from state on successful DELETE", async () => {
+        const { useWorkflows } = await import("../src/hooks/use-workflows");
+        const fetchMock = vi.mocked(fetch);
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => mockWorkflows,
+        } as Response);
+        fetchMock.mockResolvedValueOnce({ ok: true } as Response);
+
+        const { result } = renderHook(() => useWorkflows());
+
+        await waitFor(() => {
+            expect(result.current.workflows).toHaveLength(2);
+        });
+
+        await act(async () => {
+            await result.current.deleteWorkflow("wf-1");
+        });
+
+        expect(result.current.workflows).toHaveLength(1);
+        expect(result.current.workflows[0].id).toBe("wf-2");
     });
 
     it("calls DELETE /api/workflows/:id with auth header", async () => {
-        fetchSpy.mockResolvedValueOnce({ ok: true } as Response);
+        const { useWorkflows } = await import("../src/hooks/use-workflows");
+        const fetchMock = vi.mocked(fetch);
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => mockWorkflows,
+        } as Response);
+        fetchMock.mockResolvedValueOnce({ ok: true } as Response);
 
-        await deleteWorkflowImpl("wf-1", getToken);
+        const { result } = renderHook(() => useWorkflows());
 
-        expect(fetchSpy).toHaveBeenCalledWith(
-            `${API_BASE}/api/workflows/wf-1`,
-            expect.objectContaining({
-                method: "DELETE",
-                headers: expect.objectContaining({
-                    "Content-Type": "application/json",
-                    Authorization: "Bearer test-token",
-                }),
-            })
+        await waitFor(() => {
+            expect(result.current.workflows).toHaveLength(2);
+        });
+
+        await act(async () => {
+            await result.current.deleteWorkflow("wf-1");
+        });
+
+        // The DELETE call is whichever call has method: "DELETE"
+        const deleteCall = fetchMock.mock.calls.find(
+            ([, init]) => (init as RequestInit)?.method === "DELETE"
         );
+        expect(deleteCall).toBeDefined();
+        const [url, init] = deleteCall!;
+        expect(String(url)).toContain("/api/workflows/wf-1");
+        expect((init as RequestInit).method).toBe("DELETE");
+        expect(
+            ((init as RequestInit).headers as Record<string, string>)["Authorization"]
+        ).toBe("Bearer test-token");
     });
 
-    it("returns ok: true on successful DELETE", async () => {
-        fetchSpy.mockResolvedValueOnce({ ok: true } as Response);
+    it("does not change state when DELETE fails", async () => {
+        const { useWorkflows } = await import("../src/hooks/use-workflows");
+        const fetchMock = vi.mocked(fetch);
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => mockWorkflows,
+        } as Response);
+        fetchMock.mockResolvedValueOnce({ ok: false, status: 500 } as Response);
 
-        const result = await deleteWorkflowImpl("wf-1", getToken);
+        const { result } = renderHook(() => useWorkflows());
 
-        expect(result.ok).toBe(true);
-    });
+        await waitFor(() => {
+            expect(result.current.workflows).toHaveLength(2);
+        });
 
-    it("returns ok: false on failed DELETE", async () => {
-        fetchSpy.mockResolvedValueOnce({ ok: false, status: 500 } as Response);
+        await act(async () => {
+            await result.current.deleteWorkflow("wf-1");
+        });
 
-        const result = await deleteWorkflowImpl("wf-1", getToken);
-
-        expect(result.ok).toBe(false);
+        expect(result.current.workflows).toHaveLength(2);
     });
 });
