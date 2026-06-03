@@ -54,13 +54,13 @@ describe("TraceDrawer", () => {
 
     it("renders run summary in header", () => {
         render(<TraceDrawer run={makeRun()} onClose={vi.fn()} />);
-        expect(screen.getByText(/Sent email to bob@example\.com/)).toBeInTheDocument();
+        expect(screen.getByText(/Final Outcome/i)).toBeInTheDocument();
     });
 
     it("back button fires onClose", () => {
         const onClose = vi.fn();
         render(<TraceDrawer run={makeRun()} onClose={onClose} />);
-        fireEvent.click(screen.getByRole("button", { name: /back to action center/i }));
+        fireEvent.click(screen.getByRole("button", { name: /back to execution trace/i }));
         expect(onClose).toHaveBeenCalledOnce();
     });
 

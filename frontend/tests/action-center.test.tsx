@@ -67,6 +67,6 @@ describe("ActionCenter", () => {
         render(<ActionCenter />);
 
         expect(screen.getByTestId("graph-canvas")).toHaveAttribute("data-run-id", "run-from-query");
-        expect(screen.getByRole("button", { name: /back to action center/i })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /back to execution trace/i })).toBeInTheDocument();
     });
 });
