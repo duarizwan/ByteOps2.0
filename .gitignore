@@ -21,3 +21,7 @@ __pycache__/
 
 # Local agent scratch
 .superpowers/
+
+# ML experiment tracking + exported training data
+mlruns/
+backend/data/

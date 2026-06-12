@@ -17,6 +17,10 @@
 | Deployment | Train offline with PyTorch (local scripts, never deployed); serve inference via **ONNX Runtime** in the FastAPI backend (no torch in the Docker image) |
 | Course story | "Self-supervised sequence modeling of real multi-agent telemetry, evaluated against real adversarial sessions" |
 
+## Academic grounding (DeepLog)
+
+The self-supervised next-action model implements the **DeepLog** approach (Du, Li, Zheng & Srikumar, *"DeepLog: Anomaly Detection and Diagnosis from System Logs through Deep Learning,"* ACM CCS 2017): an LSTM learns normal log-key sequences and flags entries the model finds improbable (not in the top-k / high NLL predictions). ByteOps adapts it from system logs to agent-run telemetry, with agent-policy risk classes as the token alphabet. Experiment tracking uses **MLflow** to log the LSTM-vs-Isolation-Forest comparison for the report.
+
 ## 1. Concept
 
 ByteOps's agent runtime logs every step of every agent run (`agent_runs` / `agent_run_steps`). A deep learning layer learns from real runs what normal agent behavior looks like and flags deviating runs. Training is label-free; real red-team sessions are the evaluation set. Anomaly scores surface in the Action Center and as per-step heat coloring in the run graph.

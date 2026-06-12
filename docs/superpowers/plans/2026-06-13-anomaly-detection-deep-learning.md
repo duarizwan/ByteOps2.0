@@ -801,7 +801,10 @@ torch>=2.2
 scikit-learn>=1.4
 onnx>=1.15
 numpy>=1.26
+mlflow>=2.10
 ```
+
+> **MLflow integration (chosen enhancement):** `train_anomaly.py` wraps training in an MLflow run that logs params (epochs, max_len, hidden, embed, vocab_size), metrics (lstm precision/recall/f1, isolation_forest recall), and the exported ONNX as an artifact. This produces the comparison evidence for the course report. See the `mlflow` calls embedded in the script in Step 4. MLflow stores to a local `./mlruns` dir (gitignored) — view with `mlflow ui`.
 
 - [ ] **Step 2: Write the failing test for the export helper**
 
@@ -1016,11 +1019,21 @@ def main() -> None:
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
+    import mlflow
+
+    mlflow.set_experiment("byteops-anomaly")
+
     seqs = load_sequences(Path(args.data))
     normal = [s for s in seqs if s["label"] in ("normal", "unlabeled")]
     redteam = [s for s in seqs if s["label"] == "redteam"]
     if len(normal) < 20:
         print(f"WARNING: only {len(normal)} normal runs — metrics will be weak.")
+
+    mlflow.start_run()
+    mlflow.log_params({
+        "epochs": args.epochs, "max_len": args.max_len, "hidden": args.hidden,
+        "embed": args.embed, "n_normal": len(normal), "n_redteam": len(redteam),
+    })
 
     # split normal 80/20
     rng = np.random.default_rng(args.seed)
@@ -1129,6 +1142,18 @@ def main() -> None:
         json.dumps({"max_len": max_len, "threshold": threshold}), encoding="utf-8"
     )
     (ARTIFACTS / "metrics.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
+
+    # MLflow: log flat metrics + the ONNX artifact for the course report
+    flat = {"threshold": threshold, "vocab_size": vocab_size}
+    if "lstm" in metrics:
+        flat.update({f"lstm_{k}": v for k, v in metrics["lstm"].items()})
+    if "isolation_forest" in metrics:
+        flat.update({f"iso_{k}": v for k, v in metrics["isolation_forest"].items()})
+    mlflow.log_metrics({k: float(v) for k, v in flat.items()})
+    mlflow.log_artifact(str(ARTIFACTS / "lstm_nextaction.onnx"))
+    mlflow.log_artifact(str(ARTIFACTS / "metrics.json"))
+    mlflow.end_run()
+
     print("Saved artifacts to", ARTIFACTS)
     print(json.dumps(metrics, indent=2))
 
