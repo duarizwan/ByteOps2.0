@@ -476,7 +476,7 @@ function ConnectToolModal({ onClose }: { onClose: () => void }) {
                                         >
                                             {iconUrl ? (
                                                 // eslint-disable-next-line @next/next/no-img-element
-                                                <img src={iconUrl} alt="" width={13} height={13} className="object-contain rounded-sm" />
+                                                <img src={iconUrl} alt="" width={13} height={13} className="object-contain rounded-sm" loading="lazy" />
                                             ) : (
                                                 <span className="w-3 h-3 rounded-sm bg-muted flex items-center justify-center text-[9px] font-bold">
                                                     {tool.name[0]}
@@ -562,7 +562,7 @@ function ConnectToolModal({ onClose }: { onClose: () => void }) {
                                     <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center flex-shrink-0 overflow-hidden">
                                         {iconUrl ? (
                                             // eslint-disable-next-line @next/next/no-img-element
-                                            <img src={iconUrl} alt={tool.name} width={20} height={20} className="object-contain" />
+                                            <img src={iconUrl} alt={tool.name} width={20} height={20} className="object-contain" loading="lazy" />
                                         ) : (
                                             <span className="text-xs font-bold text-muted-foreground">{tool.name[0]}</span>
                                         )}
@@ -772,7 +772,7 @@ export function CollapsibleSidebar({
                             <div className="relative flex-shrink-0 w-4 h-4">
                                 {iconUrl ? (
                                     // eslint-disable-next-line @next/next/no-img-element
-                                    <img src={iconUrl} alt={tool.name} width={16} height={16} className="w-4 h-4 object-contain" />
+                                    <img src={iconUrl} alt={tool.name} width={16} height={16} className="w-4 h-4 object-contain" loading="lazy" />
                                 ) : (
                                     <div className="w-4 h-4 rounded bg-muted" />
                                 )}

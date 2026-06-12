@@ -116,6 +116,16 @@ export function useWorkflows() {
         return res.ok;
     }, [getToken]);
 
+    const clearAll = useCallback(async () => {
+        const ids = workflows.map((w) => w.id);
+        if (ids.length === 0) return true;
+        await Promise.all(
+            ids.map((id) => authFetch(`/api/workflows/${id}`, getToken, { method: "DELETE" }))
+        );
+        setWorkflows([]);
+        return true;
+    }, [getToken, workflows]);
+
     return {
         workflows,
         isLoading,
@@ -125,5 +135,6 @@ export function useWorkflows() {
         resume,
         runNow,
         deleteWorkflow,
+        clearAll,
     };
 }

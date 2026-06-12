@@ -55,40 +55,6 @@ describe("ChatInterface — implementation checks", () => {
         expect(source).toContain('textareaRef.current.style.height = "auto"');
     });
 
-    it("imports HelpCircle from lucide-react", () => {
-        expect(source).toMatch(/import[^;]*HelpCircle[^;]*from "lucide-react"/);
-    });
-
-    it("imports useToolConnections hook", () => {
-        expect(source).toContain('from "@/hooks/use-tool-connections"');
-    });
-
-    it("imports TOOL_CAPABILITIES", () => {
-        expect(source).toContain('from "@/lib/tool-capabilities"');
-    });
-
-    it("has showHelp state", () => {
-        expect(source).toContain("showHelp");
-        expect(source).toContain("setShowHelp");
-    });
-
-    it("renders the help button with aria-label", () => {
-        expect(source).toContain('aria-label="What can ByteOps do?"');
-    });
-
-    it("renders HelpCircle icon", () => {
-        expect(source).toContain("<HelpCircle");
-    });
-
-    it("renders 'What can I help you with?' popover heading", () => {
-        expect(source).toContain("What can I help you with?");
-    });
-
-    it("has click-outside handler to close popover", () => {
-        expect(source).toContain("handleClickOutside");
-        expect(source).toContain("removeEventListener");
-    });
-
     it("defines workflow draft approval state and card", () => {
         expect(source).toContain("interface WorkflowDraft");
         expect(source).toContain("WorkflowDraftCard");

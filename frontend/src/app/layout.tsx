@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Inter } from "next/font/google";
+import { AppProviders } from "@/components/app-providers";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
@@ -30,7 +31,9 @@ export default function RootLayout({
     >
       <html lang="en" suppressHydrationWarning>
         <body className={`${inter.variable} font-sans antialiased`}>
-          <ThemeProvider>{children}</ThemeProvider>
+          <ThemeProvider>
+            <AppProviders>{children}</AppProviders>
+          </ThemeProvider>
         </body>
       </html>
     </ClerkProvider>

@@ -12,7 +12,7 @@ import {
     MarkerType,
     Panel,
 } from "@xyflow/react";
-import { Maximize2, AlertCircle } from "lucide-react";
+import { Maximize2, AlertCircle, Activity } from "lucide-react";
 import { EllipseNode } from "./graph-nodes/ellipse-node";
 import { NodeDetailPopup } from "./node-detail-popup";
 import { graphTransformer, TYPE_COLOR, TYPE_BG_COLOR, BORDER_DASHED } from "@/lib/graph-transformer";

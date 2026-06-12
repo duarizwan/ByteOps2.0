@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@clerk/nextjs";
 import {
     Bell,
@@ -105,7 +105,9 @@ function useSyncStatus() {
     }, [syncAuthFetch]);
 
     useEffect(() => {
-        const initialFetchId = setTimeout(fetchStatus, 0);
+        // Delay the initial sync status fetch slightly so it doesn't
+        // compete with the initial notifications/workflows fetch burst.
+        const initialFetchId = setTimeout(fetchStatus, 500);
         // Poll status every 30s
         const pollId = setInterval(fetchStatus, 30_000);
         // Tick the countdown every 10s for smooth updates
@@ -457,15 +459,18 @@ function WorkflowCard({
         }
     };
 
+    const deleteBtnRef = useRef<HTMLButtonElement>(null);
+
     useEffect(() => {
         if (!confirmDelete) return;
         const handler = (e: MouseEvent) => {
-            const btn = document.getElementById(`delete-btn-${workflow.id}`);
-            if (btn && !btn.contains(e.target as Node)) setConfirmDelete(false);
+            if (deleteBtnRef.current && !deleteBtnRef.current.contains(e.target as Node)) {
+                setConfirmDelete(false);
+            }
         };
         document.addEventListener("mousedown", handler);
         return () => document.removeEventListener("mousedown", handler);
-    }, [confirmDelete, workflow.id]);
+    }, [confirmDelete]);
 
     const title = cleanActivityText(workflow.name);
     const description = workflow.description ? cleanActivityText(workflow.description) : null;
@@ -578,6 +583,7 @@ function WorkflowCard({
                     Details
                 </button>
                 <button
+                    ref={deleteBtnRef}
                     id={`delete-btn-${workflow.id}`}
                     onClick={handleDeleteClick}
                     className={cn(
@@ -983,6 +989,7 @@ export function ContextPanel({ isCollapsed, onToggleCollapse, onRefreshRef, onSe
     const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
     const [runningWorkflowIds, setRunningWorkflowIds] = useState<Set<string>>(() => new Set());
     const [showSuggestionModal, setShowSuggestionModal] = useState(false);
+    const [confirmClearAll, setConfirmClearAll] = useState(false);
     const { notifications, unreadCount, isLoading, markRead, markAllRead, dismiss, refresh } =
         useNotifications();
     const {
@@ -993,6 +1000,7 @@ export function ContextPanel({ isCollapsed, onToggleCollapse, onRefreshRef, onSe
         resume: resumeWorkflow,
         runNow: runWorkflowNow,
         deleteWorkflow,
+        clearAll: clearAllWorkflows,
     } = useWorkflows();
     const { runs, isLoading: runsLoading } = useAgentRuns();
     const selectedWorkflow = workflows.find((workflow) => workflow.id === selectedWorkflowId) ?? null;
@@ -1035,6 +1043,27 @@ export function ContextPanel({ isCollapsed, onToggleCollapse, onRefreshRef, onSe
             });
         }
     }, [runWorkflowNow]);
+
+    const handleClearAllWorkflows = useCallback(async () => {
+        if (!confirmClearAll) {
+            setConfirmClearAll(true);
+            return;
+        }
+        await clearAllWorkflows();
+        setSelectedWorkflowId(null);
+        setConfirmClearAll(false);
+    }, [clearAllWorkflows, confirmClearAll]);
+
+    useEffect(() => {
+        if (!confirmClearAll) return;
+        const handler = (e: MouseEvent) => {
+            const btn = document.getElementById("clear-all-workflows-btn");
+            if (btn && !btn.contains(e.target as Node)) setConfirmClearAll(false);
+        };
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+    }, [confirmClearAll]);
+
     const tasks = notifications.filter((n) => classifyNotification(n) === "task");
     const alerts = notifications.filter((n) => classifyNotification(n) === "alert");
     const alertsUnread = alerts.filter((n) => !n.is_read).length;
@@ -1149,13 +1178,29 @@ export function ContextPanel({ isCollapsed, onToggleCollapse, onRefreshRef, onSe
                             <span className="text-xs text-muted-foreground">
                                 {workflowsLoading ? "" : `${workflows.length} workflow${workflows.length === 1 ? "" : "s"}`}
                             </span>
-                            <button
-                                onClick={() => setShowSuggestionModal(true)}
-                                className="h-7 px-2.5 rounded-lg flex items-center gap-1.5 text-xs bg-primary/10 hover:bg-primary/15 text-primary transition-colors"
-                            >
-                                <Sparkles className="w-3 h-3" />
-                                Generate with AI
-                            </button>
+                            <div className="flex items-center gap-2">
+                                {workflows.length > 0 && (
+                                    <button
+                                        id="clear-all-workflows-btn"
+                                        onClick={handleClearAllWorkflows}
+                                        className={cn(
+                                            "h-7 px-2.5 rounded-lg text-xs transition-colors",
+                                            confirmClearAll
+                                                ? "bg-destructive/10 text-destructive hover:bg-destructive/15"
+                                                : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                                        )}
+                                    >
+                                        {confirmClearAll ? "Confirm clear all" : "Clear all"}
+                                    </button>
+                                )}
+                                <button
+                                    onClick={() => setShowSuggestionModal(true)}
+                                    className="h-7 px-2.5 rounded-lg flex items-center gap-1.5 text-xs bg-primary/10 hover:bg-primary/15 text-primary transition-colors"
+                                >
+                                    <Sparkles className="w-3 h-3" />
+                                    Generate with AI
+                                </button>
+                            </div>
                         </div>
                         {workflowsLoading ? (
                             <NotificationSkeleton />

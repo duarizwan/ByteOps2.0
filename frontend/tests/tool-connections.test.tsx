@@ -206,11 +206,10 @@ describe("useToolConnections public API contract (T011)", () => {
         expect(typeof mod.useToolConnections).toBe("function");
     });
 
-    it("exports connectViaApiKey in the return value", async () => {
-        const mod = await import("../src/hooks/use-tool-connections");
+    it("exports connectViaApiKey in the provider return value", async () => {
+        const mod = await import("../src/providers/tool-connections-provider");
         expect(typeof mod.useToolConnections).toBe("function");
-        // Verify connectViaApiKey is referenced in the hook source
-        const src = mod.useToolConnections.toString();
+        const src = mod.ToolConnectionsProvider.toString();
         expect(src).toContain("connectViaApiKey");
     });
 });

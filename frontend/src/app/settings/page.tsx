@@ -171,26 +171,25 @@ function SettingsContent() {
                                 </div>
                             )}
 
-                            {/* Always show tool cards */}
-                            {loading ? (
-                                <div className="flex items-center gap-2 text-muted-foreground py-8">
-                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                    Loading connections…
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    {TOOLS.map((tool) => (
-                                        <ToolCard
-                                            key={tool.id}
-                                            tool={tool}
-                                            isConnected={isConnected(tool.id as ToolType)}
-                                            onConnect={handleConnect}
-                                            onDisconnect={(id) => disconnect(id)}
-                                            onSilentRefresh={silentRefresh}
-                                        />
-                                    ))}
+                            {loading && (
+                                <div className="flex items-center gap-2 text-muted-foreground mb-4 text-sm">
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    Checking connection statuses…
                                 </div>
                             )}
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {TOOLS.map((tool) => (
+                                    <ToolCard
+                                        key={tool.id}
+                                        tool={tool}
+                                        isConnected={isConnected(tool.id as ToolType)}
+                                        statusLoading={loading}
+                                        onConnect={handleConnect}
+                                        onDisconnect={(id) => disconnect(id)}
+                                        onSilentRefresh={silentRefresh}
+                                    />
+                                ))}
+                            </div>
                         </section>
 
                         {/* Account Settings section */}

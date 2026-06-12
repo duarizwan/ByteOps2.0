@@ -256,18 +256,20 @@ async def _run_chat(
         await db.refresh(user_msg)
 
         # ── 3. Load conversation history ──────────────────────────────────────
+        # Fetch only the last 40 messages at the SQL level (ORDER BY DESC LIMIT)
+        # to avoid loading the entire history into memory and slicing in Python.
         result = await db.execute(
             select(Message)
             .where(Message.conversation_id == conv.id)
-            .order_by(Message.created_at)
+            .order_by(Message.created_at.desc())
+            .limit(40)
         )
+        # Reverse so history is oldest-first for the LLM context window
         history = [
             {"role": msg.role.value, "content": msg.content}
-            for msg in result.scalars().all()
+            for msg in reversed(result.scalars().all())
             if msg.role in (MessageRole.USER, MessageRole.ASSISTANT)
         ]
-        # Cap to last 40 messages (20 exchanges) — sufficient for context, avoids bloating LLM input
-        history = history[-40:]
 
         # ── 4. Route based on intent ──────────────────────────────────────────
         intent = "workflow" if is_workflow_creation_request(request.message) else detect_intent(request.message, history)

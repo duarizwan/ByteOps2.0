@@ -1,15 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useRef, useEffect } from "react";
-import { Send, User, Paperclip, Mic, Mail, ExternalLink, Loader2, HelpCircle, X, AlertCircle } from "lucide-react";
+import { useState, useRef, useEffect, useCallback, memo } from "react";
+import { Send, User, Paperclip, Mic, Mail, ExternalLink, Loader2, X, AlertCircle } from "lucide-react";
 import { useAuth } from "@clerk/nextjs";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 import { useConversations, ConversationMessage } from "@/hooks/use-conversations";
 import { ByteOpsLogoMark } from "@/lib/brand-icons";
 import { useToolConnections } from "@/hooks/use-tool-connections";
-import { TOOL_CAPABILITIES } from "@/lib/tool-capabilities";
+
 import { api } from "@/lib/api";
 import { classifyError } from "@/lib/classify-error";
 import type { ActionErrorCategory } from "@/lib/action-center-types";
@@ -95,12 +95,59 @@ const SUGGESTED_PROMPTS = [
     "Show high-priority tasks",
 ];
 
-const STAGE_LABELS = {
-    understanding:  "Understanding request…",
-    routing:        "Routing to specialist agent…",
-    awaiting:       "Waiting for approval…",
-    finalizing:     "Finalizing response…",
-} as const;
+const ROTATING_LABELS: Record<string, string[]> = {
+    understanding: [
+        "Understanding request…",
+        "Reading your message…",
+        "Thinking it through…",
+        "Processing your query…",
+    ],
+    gmail: [
+        "Connecting to Gmail…",
+        "Checking your inbox…",
+        "Reading your emails…",
+        "Searching messages…",
+    ],
+    calendar: [
+        "Checking your calendar…",
+        "Looking up your schedule…",
+        "Reviewing your events…",
+        "Scanning your agenda…",
+    ],
+    github: [
+        "Connecting to GitHub…",
+        "Checking your repos…",
+        "Looking up pull requests…",
+        "Scanning issues…",
+    ],
+    slack: [
+        "Connecting to Slack…",
+        "Checking your channels…",
+        "Reading messages…",
+        "Scanning workspace…",
+    ],
+    jira: [
+        "Connecting to Jira…",
+        "Checking your tickets…",
+        "Scanning your sprint…",
+        "Looking up issues…",
+    ],
+    dropbox: [
+        "Connecting to Dropbox…",
+        "Browsing your files…",
+        "Scanning your storage…",
+    ],
+    routing: [
+        "Routing to specialist agent…",
+        "Finding the right tool…",
+        "Connecting to service…",
+    ],
+    awaiting: [
+        "Waiting for your approval…",
+        "Action needs your review…",
+        "Ready when you are…",
+    ],
+};
 
 const CHAT_ERROR_MESSAGES: Record<string, { text: string; actionLabel?: string; actionPath?: string }> = {
     oauth_missing:   { text: "A required integration isn't connected.", actionLabel: "Go to Settings →", actionPath: "/settings" },
@@ -352,6 +399,170 @@ function WorkflowDraftCard({ draft, onDraftChange, onApprove, onDismiss, isAppro
 }
 
 /* ========================
+   MessageBubble — memoized so only the actively-streaming bubble re-renders
+   on each SSE delta. Past messages are skipped entirely by React's reconciler.
+   ======================== */
+interface MessageBubbleProps {
+    message: Message;
+    stageContext: string;
+    stageVariantIdx: number;
+    renderToolResult: (tc: ToolCall) => React.ReactNode;
+    onSendPrompt: (prompt: string) => void;
+}
+
+const MessageBubble = memo(function MessageBubble({
+    message,
+    stageContext,
+    stageVariantIdx,
+    renderToolResult,
+    onSendPrompt,
+}: MessageBubbleProps) {
+    return (
+        <div
+            className={cn(
+                "flex gap-3 message-in",
+                message.role === "user" ? "flex-row-reverse" : ""
+            )}
+        >
+            {/* Avatar */}
+            <div
+                className={cn(
+                    "flex items-center justify-center w-8 h-8 rounded-xl flex-shrink-0 mt-1 font-bold text-sm leading-none",
+                    message.role === "user"
+                        ? "bg-primary text-primary-foreground"
+                        : "gradient-ai text-white"
+                )}
+            >
+                {message.role === "user" ? (
+                    <User className="w-4 h-4" />
+                ) : (
+                    <ByteOpsLogoMark className="w-3.5 h-4" />
+                )}
+            </div>
+
+            {/* Bubble */}
+            <div
+                className={cn(
+                    "max-w-[85%] md:max-w-[75%]",
+                    message.role === "user" ? "items-end" : ""
+                )}
+            >
+                <div
+                    className={cn(
+                        "p-4 rounded-2xl",
+                        message.role === "user"
+                            ? "bg-user-bubble text-foreground"
+                            : "gradient-ai text-white shadow-soft"
+                    )}
+                >
+                    {message.errorClass ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                                <AlertCircle size={14} style={{ color: "rgba(255,255,255,0.7)", flexShrink: 0, marginTop: 1 }} />
+                                <span style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", lineHeight: 1.5 }}>
+                                    {CHAT_ERROR_MESSAGES[message.errorClass]?.text ?? CHAT_ERROR_MESSAGES.unknown.text}
+                                </span>
+                            </div>
+                            {CHAT_ERROR_MESSAGES[message.errorClass]?.actionLabel && (
+                                <Link
+                                    href={CHAT_ERROR_MESSAGES[message.errorClass]!.actionPath!}
+                                    style={{
+                                        fontSize: 12,
+                                        color: "rgba(255,255,255,0.9)",
+                                        textDecoration: "underline",
+                                        textUnderlineOffset: 3,
+                                        marginLeft: 22,
+                                    }}
+                                >
+                                    {CHAT_ERROR_MESSAGES[message.errorClass]!.actionLabel}
+                                </Link>
+                            )}
+                        </div>
+                    ) : message.content ? (
+                        <>
+                            {message.role === "user" ? (
+                                <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                                    {message.content}
+                                </div>
+                            ) : (
+                                <div className="text-sm leading-relaxed prose prose-sm prose-invert max-w-none
+                                    [&>p]:mb-2 [&>p:last-child]:mb-0
+                                    [&>ul]:list-disc [&>ul]:pl-4 [&>ul]:mb-2
+                                    [&>ol]:list-decimal [&>ol]:pl-4 [&>ol]:mb-2
+                                    [&>li]:mb-0.5
+                                    [&>h1]:text-base [&>h1]:font-bold [&>h1]:mb-1
+                                    [&>h2]:text-sm [&>h2]:font-semibold [&>h2]:mb-1
+                                    [&>h3]:text-sm [&>h3]:font-medium [&>h3]:mb-1
+                                    [&>code]:bg-white/20 [&>code]:rounded [&>code]:px-1 [&>code]:text-xs
+                                    [&>pre]:bg-black/20 [&>pre]:rounded-lg [&>pre]:p-3 [&>pre]:overflow-x-auto
+                                    [&>pre>code]:bg-transparent [&>pre>code]:px-0
+                                    [&>strong]:font-semibold [&>em]:italic
+                                    [&_code]:bg-white/20 [&_code]:rounded [&_code]:px-1 [&_code]:text-xs
+                                    [&_strong]:font-semibold [&_em]:italic">
+                                    <ReactMarkdown
+                                        components={{
+                                            a: ({ href, children }) => (
+                                                <a
+                                                    href={href}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="underline underline-offset-2 opacity-90 hover:opacity-100 break-all"
+                                                >
+                                                    {children}
+                                                </a>
+                                            ),
+                                        }}
+                                    >
+                                        {message.content}
+                                    </ReactMarkdown>
+                                </div>
+                            )}
+                            {message.id === "welcome" && (
+                                <div className="flex flex-wrap gap-2 mt-3">
+                                    {SUGGESTED_PROMPTS.map((prompt, index) => (
+                                        <button
+                                            key={index}
+                                            onClick={() => onSendPrompt(prompt)}
+                                            className="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white text-sm rounded-full transition-colors border border-white/20 whitespace-nowrap"
+                                        >
+                                            {prompt}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </>
+                    ) : (
+                        message.role === "assistant" && (
+                            message.stage ? (
+                                <div className="flex items-center gap-2 h-5">
+                                    <div className="w-1.5 h-1.5 bg-white/60 rounded-full animate-pulse" />
+                                    <span style={{ fontSize: 12, color: "rgba(255,255,255,0.75)", fontStyle: "italic" }}>
+                                        {(ROTATING_LABELS[stageContext] ?? ROTATING_LABELS.understanding)[stageVariantIdx]}
+                                    </span>
+                                </div>
+                            ) : (
+                                (!message.toolCalls || message.toolCalls.length === 0) && (
+                                    <div className="flex gap-1 h-5 items-center">
+                                        <div className="w-1.5 h-1.5 bg-white/70 rounded-full animate-pulse" style={{ animationDelay: "0ms" }} />
+                                        <div className="w-1.5 h-1.5 bg-white/70 rounded-full animate-pulse" style={{ animationDelay: "150ms" }} />
+                                        <div className="w-1.5 h-1.5 bg-white/70 rounded-full animate-pulse" style={{ animationDelay: "300ms" }} />
+                                    </div>
+                                )
+                            )
+                        )
+                    )}
+
+                    {/* Render tool executions */}
+                    {message.toolCalls?.map((tc, idx) => (
+                        <div key={idx}>{renderToolResult(tc)}</div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+});
+
+/* ========================
    Component
    ======================== */
 export function ChatInterface({
@@ -367,27 +578,44 @@ export function ChatInterface({
     const [input, setInput] = useState("");
     const [isTyping, setIsTyping] = useState(false);
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+    const [stageContext, setStageContext] = useState("understanding");
+    const [stageVariantIdx, setStageVariantIdx] = useState(0);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const streamAbortRef = useRef<AbortController | null>(null);
     const [attachedFile, setAttachedFile] = useState<File | null>(null);
-    const [showHelp, setShowHelp] = useState(false);
+
     const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
     const [pendingWorkflowDraft, setPendingWorkflowDraft] = useState<WorkflowDraft | null>(null);
     const [isApprovingWorkflowDraft, setIsApprovingWorkflowDraft] = useState(false);
     const [workflowDraftError, setWorkflowDraftError] = useState<string | null>(null);
-    const helpRef = useRef<HTMLDivElement>(null);
+
     const { connections } = useToolConnections();
-    const connectedTools = connections.filter(c => c.status === "connected");
 
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    };
+    // Track whether we are actively streaming to pick the right scroll behavior.
+    // "instant" during streaming prevents the scroll from fighting the rendering;
+    // "smooth" on new user messages gives a nicer UX.
+    const scrollToBottom = useCallback((instant = false) => {
+        messagesEndRef.current?.scrollIntoView({
+            behavior: instant ? "instant" : "smooth",
+        });
+    }, []);
 
+    // Scroll on new messages — instant while streaming to avoid jank
     useEffect(() => {
-        scrollToBottom();
-    }, [messages]);
+        scrollToBottom(isTyping);
+    }, [messages, isTyping, scrollToBottom]);
+
+    // Rotate stage label every 1.8s while the agent is thinking
+    useEffect(() => {
+        if (!isTyping) { setStageVariantIdx(0); return; }
+        const pool = ROTATING_LABELS[stageContext] ?? ROTATING_LABELS.understanding;
+        const id = setInterval(() => {
+            setStageVariantIdx(i => (i + 1) % pool.length);
+        }, 1800);
+        return () => clearInterval(id);
+    }, [isTyping, stageContext]);
 
     // ── Ask AI bridge: auto-send message from workflow/notification panel ────────
     useEffect(() => {
@@ -437,17 +665,6 @@ export function ChatInterface({
         return () => { cancelled = true; };
     }, [conversationId, getConversationDetail]);
 
-    useEffect(() => {
-        function handleClickOutside(e: MouseEvent) {
-            if (helpRef.current && !helpRef.current.contains(e.target as Node)) {
-                setShowHelp(false);
-            }
-        }
-        if (showHelp) {
-            document.addEventListener("mousedown", handleClickOutside);
-            return () => document.removeEventListener("mousedown", handleClickOutside);
-        }
-    }, [showHelp]);
 
     // ── Send message ──────────────────────────────────────────────────────────
     /** Pass an explicit `message` to send a suggested prompt without going through the input state. */
@@ -465,7 +682,9 @@ export function ChatInterface({
         }
         setAttachedFile(null);
         setIsTyping(true);
-        let chatTimeoutId: ReturnType<typeof window.setTimeout> | null = null;
+        setStageContext("understanding");
+        setStageVariantIdx(0);
+        let chatTimeoutId: number | null = null;
 
         const userMessage: Message = {
             id: Date.now().toString(),
@@ -479,7 +698,7 @@ export function ChatInterface({
         setMessages((prev) => [
             ...prev,
             userMessage,
-            { id: assistantMessageId, role: "assistant", content: "", timestamp: new Date(), toolCalls: [], stage: STAGE_LABELS.understanding },
+            { id: assistantMessageId, role: "assistant", content: "", timestamp: new Date(), toolCalls: [], stage: "active" },
         ]);
 
         try {
@@ -592,7 +811,10 @@ export function ChatInterface({
                                         }
                                         newStage = undefined; // content flowing — clear stage label
                                     } else if (event.type === "tool_call_start") {
-                                        newStage = STAGE_LABELS.routing;
+                                        const toolCtx = event.tool?.split(":")?.[0] ?? "routing";
+                                        setStageContext(ROTATING_LABELS[toolCtx] ? toolCtx : "routing");
+                                        setStageVariantIdx(0);
+                                        newStage = "active";
                                         newToolCalls.push({
                                             tool: event.tool,
                                             args: event.args,
@@ -606,7 +828,9 @@ export function ChatInterface({
                                             newToolCalls[idx] = { ...newToolCalls[idx], status: "done", result: event.content };
                                         }
                                     } else if (event.type === "approval_required") {
-                                        newStage = STAGE_LABELS.awaiting;
+                                        setStageContext("awaiting");
+                                        setStageVariantIdx(0);
+                                        newStage = "active";
                                     } else if (event.type === "workflow_draft") {
                                         newContent = workflowDraftAssistantContent(event);
                                         newStage = undefined;
@@ -740,7 +964,7 @@ export function ChatInterface({
         }
     };
 
-    const renderToolResult = (tc: ToolCall) => {
+    const renderToolResult = useCallback((tc: ToolCall) => {
         if (tc.status === "pending") {
             return (
                 <div className="mt-2 p-2 bg-background/50 rounded flex items-center gap-2 text-xs text-muted-foreground italic border border-border/50">
@@ -772,59 +996,10 @@ export function ChatInterface({
             );
         }
         return null;
-    };
+    }, []);
 
     return (
         <div className="h-full flex flex-col bg-chat-bg overflow-hidden rounded-2xl m-3">
-            {/* Chat Header */}
-            <div className="p-4 border-b border-border flex-shrink-0 flex items-center justify-between">
-                <div>
-                    <h2 className="font-semibold text-foreground">ByteOps AI</h2>
-                    <p className="text-sm text-muted-foreground">AI-enabled workspace</p>
-                </div>
-
-                {/* Help popover */}
-                <div className="relative" ref={helpRef}>
-                    <button
-                        onClick={() => setShowHelp(v => !v)}
-                        aria-label="What can ByteOps do?"
-                        className="text-muted-foreground hover:text-foreground transition-colors p-1.5 rounded-md hover:bg-accent"
-                    >
-                        <HelpCircle className="w-4 h-4" />
-                    </button>
-
-                    {showHelp && (
-                        <div className="absolute right-0 top-9 z-50 w-72 rounded-xl border border-border bg-background shadow-lg p-4 text-sm">
-                            <p className="font-medium text-foreground mb-3">What can I help you with?</p>
-                            {connectedTools.length === 0 ? (
-                                <p className="text-muted-foreground">
-                                    Connect a tool in Settings → Connections to get started.
-                                </p>
-                            ) : (
-                                <div className="space-y-3 max-h-64 overflow-y-auto custom-scrollbar">
-                                    {connectedTools.map(tool => {
-                                        const entry = TOOL_CAPABILITIES[tool.tool_type];
-                                        if (!entry) return null;
-                                        return (
-                                            <div key={tool.tool_type}>
-                                                <p className="font-medium text-foreground">{entry.label}</p>
-                                                <ul className="mt-1 space-y-0.5">
-                                                    {entry.capabilities.map(cap => (
-                                                        <li key={cap} className="text-muted-foreground">
-                                                            · {cap}
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
-            </div>
-
             {/* Loading history overlay */}
             {isLoadingHistory && (
                 <div className="flex-1 flex items-center justify-center">
@@ -835,150 +1010,16 @@ export function ChatInterface({
             {/* Messages Area */}
             {!isLoadingHistory && (
                 <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-                    {/* Messages */}
+                    {/* Messages — each bubble is memoized; only the streaming message re-renders on deltas */}
                     {messages.map((message) => (
-                        <div
+                        <MessageBubble
                             key={message.id}
-                            className={cn(
-                                "flex gap-3 message-in",
-                                message.role === "user" ? "flex-row-reverse" : ""
-                            )}
-                        >
-                            {/* Avatar */}
-                            <div
-                                className={cn(
-                                    "flex items-center justify-center w-8 h-8 rounded-xl flex-shrink-0 mt-1 font-bold text-sm leading-none",
-                                    message.role === "user"
-                                        ? "bg-primary text-primary-foreground"
-                                        : "gradient-ai text-white"
-                                )}
-                            >
-                                {message.role === "user" ? (
-                                    <User className="w-4 h-4" />
-                                ) : (
-                                    <ByteOpsLogoMark className="w-3.5 h-4" />
-                                )}
-                            </div>
-
-                            {/* Bubble */}
-                            <div
-                                className={cn(
-                                    "max-w-[85%] md:max-w-[75%]",
-                                    message.role === "user" ? "items-end" : ""
-                                )}
-                            >
-                                <div
-                                    className={cn(
-                                        "p-4 rounded-2xl",
-                                        message.role === "user"
-                                            ? "bg-user-bubble text-foreground"
-                                            : "gradient-ai text-white shadow-soft"
-                                    )}
-                                >
-                                    {message.errorClass ? (
-                                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                                            <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                                                <AlertCircle size={14} style={{ color: "rgba(255,255,255,0.7)", flexShrink: 0, marginTop: 1 }} />
-                                                <span style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", lineHeight: 1.5 }}>
-                                                    {CHAT_ERROR_MESSAGES[message.errorClass]?.text ?? CHAT_ERROR_MESSAGES.unknown.text}
-                                                </span>
-                                            </div>
-                                            {CHAT_ERROR_MESSAGES[message.errorClass]?.actionLabel && (
-                                                <Link
-                                                    href={CHAT_ERROR_MESSAGES[message.errorClass]!.actionPath!}
-                                                    style={{
-                                                        fontSize: 12,
-                                                        color: "rgba(255,255,255,0.9)",
-                                                        textDecoration: "underline",
-                                                        textUnderlineOffset: 3,
-                                                        marginLeft: 22,
-                                                    }}
-                                                >
-                                                    {CHAT_ERROR_MESSAGES[message.errorClass]!.actionLabel}
-                                                </Link>
-                                            )}
-                                        </div>
-                                    ) : message.content ? (
-                                        <>
-                                            {message.role === "user" ? (
-                                                <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                                                    {message.content}
-                                                </div>
-                                            ) : (
-                                                <div className="text-sm leading-relaxed prose prose-sm prose-invert max-w-none
-                                                    [&>p]:mb-2 [&>p:last-child]:mb-0
-                                                    [&>ul]:list-disc [&>ul]:pl-4 [&>ul]:mb-2
-                                                    [&>ol]:list-decimal [&>ol]:pl-4 [&>ol]:mb-2
-                                                    [&>li]:mb-0.5
-                                                    [&>h1]:text-base [&>h1]:font-bold [&>h1]:mb-1
-                                                    [&>h2]:text-sm [&>h2]:font-semibold [&>h2]:mb-1
-                                                    [&>h3]:text-sm [&>h3]:font-medium [&>h3]:mb-1
-                                                    [&>code]:bg-white/20 [&>code]:rounded [&>code]:px-1 [&>code]:text-xs
-                                                    [&>pre]:bg-black/20 [&>pre]:rounded-lg [&>pre]:p-3 [&>pre]:overflow-x-auto
-                                                    [&>pre>code]:bg-transparent [&>pre>code]:px-0
-                                                    [&>strong]:font-semibold [&>em]:italic
-                                                    [&_code]:bg-white/20 [&_code]:rounded [&_code]:px-1 [&_code]:text-xs
-                                                    [&_strong]:font-semibold [&_em]:italic">
-                                                    <ReactMarkdown
-                                                        components={{
-                                                            a: ({ href, children }) => (
-                                                                <a
-                                                                    href={href}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    className="underline underline-offset-2 opacity-90 hover:opacity-100 break-all"
-                                                                >
-                                                                    {children}
-                                                                </a>
-                                                            ),
-                                                        }}
-                                                    >
-                                                        {message.content}
-                                                    </ReactMarkdown>
-                                                </div>
-                                            )}
-                                            {message.id === "welcome" && (
-                                                <div className="flex flex-wrap gap-2 mt-3">
-                                                    {SUGGESTED_PROMPTS.map((prompt, index) => (
-                                                        <button
-                                                            key={index}
-                                                            onClick={() => handleSend(prompt)}
-                                                            className="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white text-sm rounded-full transition-colors border border-white/20 whitespace-nowrap"
-                                                        >
-                                                            {prompt}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </>
-                                    ) : (
-                                        message.role === "assistant" && (
-                                            message.stage ? (
-                                                <div className="flex items-center gap-2 h-5">
-                                                    <div className="w-1.5 h-1.5 bg-white/60 rounded-full animate-pulse" />
-                                                    <span style={{ fontSize: 12, color: "rgba(255,255,255,0.75)", fontStyle: "italic" }}>
-                                                        {message.stage}
-                                                    </span>
-                                                </div>
-                                            ) : (
-                                                (!message.toolCalls || message.toolCalls.length === 0) && (
-                                                    <div className="flex gap-1 h-5 items-center">
-                                                        <div className="w-1.5 h-1.5 bg-white/70 rounded-full animate-pulse" style={{ animationDelay: "0ms" }} />
-                                                        <div className="w-1.5 h-1.5 bg-white/70 rounded-full animate-pulse" style={{ animationDelay: "150ms" }} />
-                                                        <div className="w-1.5 h-1.5 bg-white/70 rounded-full animate-pulse" style={{ animationDelay: "300ms" }} />
-                                                    </div>
-                                                )
-                                            )
-                                        )
-                                    )}
-
-                                    {/* Render tool executions */}
-                                    {message.toolCalls?.map((tc, idx) => (
-                                        <div key={idx}>{renderToolResult(tc)}</div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
+                            message={message}
+                            stageContext={stageContext}
+                            stageVariantIdx={stageVariantIdx}
+                            renderToolResult={renderToolResult}
+                            onSendPrompt={handleSend}
+                        />
                     ))}
 
                     {pendingApproval && (

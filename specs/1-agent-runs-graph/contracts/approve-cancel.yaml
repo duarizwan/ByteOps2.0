@@ -1,0 +1,111 @@
+openapi: "3.0.3"
+info:
+  title: Action Center — Approve / Cancel Endpoints
+  description: >
+    Contracts for the two Action Center backend endpoints.
+    Both endpoints already exist in backend/app/api/agent_runs.py.
+    This file documents them for frontend implementation reference.
+  version: "1.0.0"
+
+paths:
+  /api/agent-runs/{run_id}/approve:
+    post:
+      summary: Approve a pending agent run
+      description: >
+        Signals the approval gate to proceed. Run must be in `waiting_approval` status.
+        Calls `resolve_approval(run_id, approved=True)` internally.
+      security:
+        - ClerkBearer: []
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Run approved and execution resumed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "approved"
+                  run_id:
+                    type: string
+                    format: uuid
+        "404":
+          description: Run not found or not owned by current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorDetail"
+        "409":
+          description: Run is not in waiting_approval status, or no approval gate active
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorDetail"
+        "401":
+          description: Missing or invalid Clerk token
+
+  /api/agent-runs/{run_id}/cancel:
+    post:
+      summary: Cancel a pending agent run
+      description: >
+        Signals the approval gate to abort. Run must be in `waiting_approval` status.
+        Sets run.status to CANCELLED. Calls `resolve_approval(run_id, approved=False)` internally.
+      security:
+        - ClerkBearer: []
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Run cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "cancelled"
+                  run_id:
+                    type: string
+                    format: uuid
+        "404":
+          description: Run not found or not owned by current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorDetail"
+        "409":
+          description: Run is not in waiting_approval status, or no approval gate active
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorDetail"
+        "401":
+          description: Missing or invalid Clerk token
+
+components:
+  securitySchemes:
+    ClerkBearer:
+      type: http
+      scheme: bearer
+      description: Clerk-issued JWT, same as all other authenticated endpoints
+  schemas:
+    ErrorDetail:
+      type: object
+      properties:
+        detail:
+          type: string
+          example: "Run is not waiting for approval."

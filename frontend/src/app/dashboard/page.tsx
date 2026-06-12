@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Panel, Group, Separator, usePanelRef } from "react-resizable-panels";
 import { TopBar } from "@/components/dashboard/top-bar";
@@ -8,8 +8,10 @@ import { CollapsibleSidebar } from "@/components/dashboard/collapsible-sidebar";
 import { ChatInterface } from "@/components/dashboard/chat-interface";
 import { ContextPanel } from "@/components/dashboard/context-panel";
 import { useConversations } from "@/hooks/use-conversations";
+import { Loader2 } from "lucide-react";
 
-export default function DashboardPage() {
+/* ── Inner component — uses useSearchParams so must be inside Suspense ── */
+function DashboardContent() {
     const searchParams = useSearchParams();
     const [isLeftCollapsed, setIsLeftCollapsed] = useState(false);
     const [isRightCollapsed, setIsRightCollapsed] = useState(false);
@@ -155,5 +157,20 @@ export default function DashboardPage() {
                 </Group>
             </div>
         </div>
+    );
+}
+
+/* ── Page — Suspense wraps DashboardContent because it uses useSearchParams ── */
+export default function DashboardPage() {
+    return (
+        <Suspense
+            fallback={
+                <div className="h-screen flex items-center justify-center bg-background">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+            }
+        >
+            <DashboardContent />
+        </Suspense>
     );
 }

@@ -2,6 +2,8 @@
 
 import logging
 import time
+import uuid
+from dataclasses import dataclass
 from typing import Annotated
 import httpx
 from fastapi import Depends, HTTPException, status
@@ -22,10 +24,40 @@ _jwks_cache: dict | None = None
 # Shared HTTP client — connection pool reused across all requests
 _http_client = httpx.AsyncClient(timeout=10.0)
 
-# In-memory user cache: clerk_id -> (db_user_id, expires_at)
-# Avoids a DB SELECT on every authenticated request after first login.
+# In-memory user cache: clerk_id -> (snapshot, expires_at)
+# Avoids a DB round-trip on every authenticated request after first login.
 _USER_CACHE_TTL = 300  # 5 minutes
-_user_id_cache: dict[str, tuple] = {}
+_user_cache: dict[str, tuple["_CachedUserSnapshot", float]] = {}
+
+
+@dataclass(frozen=True)
+class _CachedUserSnapshot:
+    id: uuid.UUID
+    clerk_id: str
+    email: str
+    display_name: str | None
+    avatar_url: str | None
+
+
+def _snapshot_user(user: User) -> _CachedUserSnapshot:
+    return _CachedUserSnapshot(
+        id=user.id,
+        clerk_id=user.clerk_id,
+        email=user.email,
+        display_name=user.display_name,
+        avatar_url=user.avatar_url,
+    )
+
+
+def _user_from_snapshot(snapshot: _CachedUserSnapshot) -> User:
+    """Reconstruct a detached User for read-only auth (uses .id in queries)."""
+    return User(
+        id=snapshot.id,
+        clerk_id=snapshot.clerk_id,
+        email=snapshot.email,
+        display_name=snapshot.display_name,
+        avatar_url=snapshot.avatar_url,
+    )
 
 
 async def _get_clerk_jwks(force_refresh: bool = False) -> dict:
@@ -154,17 +186,14 @@ async def get_current_clerk_user(
         )
         raise credentials_exception
 
-    # Fast path: check in-process cache to avoid DB round-trip on every request
+    # Fast path: return cached user snapshot without a DB round-trip
     now = time.time()
-    cached = _user_id_cache.get(clerk_id)
+    cached = _user_cache.get(clerk_id)
     if cached is not None:
-        db_user_id, expires_at = cached
+        snapshot, expires_at = cached
         if now < expires_at:
-            user = await db.get(User, db_user_id)
-            if user is not None:
-                return user
-        else:
-            del _user_id_cache[clerk_id]
+            return _user_from_snapshot(snapshot)
+        del _user_cache[clerk_id]
 
     # Cache miss — look up user in DB
     result = await db.execute(select(User).where(User.clerk_id == clerk_id))
@@ -184,5 +213,5 @@ async def get_current_clerk_user(
         await db.refresh(user)
 
     # Populate cache for subsequent requests
-    _user_id_cache[clerk_id] = (user.id, now + _USER_CACHE_TTL)
+    _user_cache[clerk_id] = (_snapshot_user(user), now + _USER_CACHE_TTL)
     return user

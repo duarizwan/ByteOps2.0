@@ -44,6 +44,8 @@ const workflowActions = vi.hoisted(() => ({
     resume: vi.fn(),
     runNow: vi.fn(),
     refresh: vi.fn(),
+    deleteWorkflow: vi.fn(),
+    clearAll: vi.fn(),
 }));
 const agentRunState = vi.hoisted(() => ({
     runs: [] as Array<{
@@ -84,6 +86,8 @@ vi.mock("@/hooks/use-workflows", () => ({
         resume: workflowActions.resume,
         runNow: workflowActions.runNow,
         refresh: workflowActions.refresh,
+        deleteWorkflow: workflowActions.deleteWorkflow,
+        clearAll: workflowActions.clearAll,
     }),
 }));
 vi.mock("@/hooks/use-agent-runs", () => ({
@@ -111,6 +115,8 @@ describe("ContextPanel", () => {
         workflowActions.resume.mockReset();
         workflowActions.runNow.mockReset();
         workflowActions.refresh.mockReset();
+        workflowActions.deleteWorkflow.mockReset();
+        workflowActions.clearAll.mockReset();
         agentRunState.runs = [];
         agentRunState.isLoading = false;
     });
@@ -678,5 +684,32 @@ describe("ContextPanel", () => {
 
         expect(screen.getByText(/summarize Gmail and Slack/i)).toBeInTheDocument();
         expect(screen.getByRole("button", { name: /create with ai/i })).toBeInTheDocument();
+    });
+
+    it("shows Clear all in workflows tab and requires confirmation", async () => {
+        workflowState.workflows = [
+            {
+                id: "workflow-1",
+                name: "Morning summary",
+                description: null,
+                status: "active",
+                trigger_label: "Every morning",
+                action_summary: "Summarize inbox",
+                last_run_at: null,
+                next_run_at: null,
+                last_error: null,
+            },
+        ];
+        workflowActions.clearAll.mockResolvedValue(true);
+
+        render(<ContextPanel {...props} />);
+        fireEvent.click(screen.getByRole("button", { name: /workflows/i }));
+
+        const clearButton = screen.getByRole("button", { name: /clear all/i });
+        fireEvent.click(clearButton);
+        expect(workflowActions.clearAll).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole("button", { name: /confirm clear all/i }));
+        expect(workflowActions.clearAll).toHaveBeenCalledTimes(1);
     });
 });

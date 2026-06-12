@@ -17,12 +17,13 @@ interface ToolMeta {
 interface ToolCardProps {
     tool: ToolMeta;
     isConnected: boolean;
+    statusLoading?: boolean;
     onConnect: (tool: ToolType) => void;
     onDisconnect: (tool: ToolType) => Promise<void>;
     onSilentRefresh?: (tool: ToolType) => Promise<{ refreshed: boolean; error?: string }>;
 }
 
-export function ToolCard({ tool, isConnected, onConnect, onDisconnect, onSilentRefresh }: ToolCardProps) {
+export function ToolCard({ tool, isConnected, statusLoading = false, onConnect, onDisconnect, onSilentRefresh }: ToolCardProps) {
     const [refreshing, setRefreshing] = useState(false);
     const [refreshMsg, setRefreshMsg] = useState<string | null>(null);
 
@@ -62,7 +63,11 @@ export function ToolCard({ tool, isConnected, onConnect, onDisconnect, onSilentR
                         );
                     })()}
                 </div>
-                {isConnected ? (
+                {statusLoading ? (
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-xl bg-muted text-muted-foreground text-xs font-medium">
+                        Checking…
+                    </span>
+                ) : isConnected ? (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">
                         <Check className="w-3 h-3" />
                         Connected

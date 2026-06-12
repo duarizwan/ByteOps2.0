@@ -35,6 +35,34 @@ export interface ConversationDetail extends ConversationSummary {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+/* ── Conversation detail cache ───────────────────────────────────────────────
+   Module-level cache so the cache survives across component remounts.
+   Each entry expires after CACHE_TTL_MS. The cache is invalidated on delete
+   and rename so stale data is never shown after mutations.
+   ──────────────────────────────────────────────────────────────────────────── */
+const CACHE_TTL_MS = 60_000; // 60 seconds
+
+interface CacheEntry {
+    data: ConversationDetail;
+    expiresAt: number;
+}
+
+const detailCache = new Map<string, CacheEntry>();
+
+function getCached(id: string): ConversationDetail | null {
+    const entry = detailCache.get(id);
+    if (!entry) return null;
+    if (Date.now() > entry.expiresAt) {
+        detailCache.delete(id);
+        return null;
+    }
+    return entry.data;
+}
+
+function setCached(id: string, data: ConversationDetail): void {
+    detailCache.set(id, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+}
+
 /**
  * Shared fetch helper — accepts the Clerk getToken function from useAuth()
  * so it always uses the correct, fresh token for the current Clerk session.
@@ -90,6 +118,7 @@ export function useConversations() {
             );
             if (res.ok || res.status === 204) {
                 setConversations((prev) => prev.filter((c) => c.id !== id));
+                detailCache.delete(id); // Invalidate cache entry
                 return true;
             }
         } catch (e) {
@@ -112,6 +141,7 @@ export function useConversations() {
                     setConversations((prev) =>
                         prev.map((c) => (c.id === updated.id ? updated : c))
                     );
+                    detailCache.delete(id); // Invalidate so next fetch gets fresh title
                     return updated;
                 }
             } catch (e) {
@@ -122,12 +152,20 @@ export function useConversations() {
         [getToken]
     );
 
-    /** Fetch a conversation's full message history. */
+    /** Fetch a conversation's full message history. Returns from cache if fresh. */
     const getConversationDetail = useCallback(
         async (id: string): Promise<ConversationDetail | null> => {
+            // Return cached data if it's still fresh — avoids API round-trip on quick switches
+            const cached = getCached(id);
+            if (cached) return cached;
+
             try {
                 const res = await authFetch(`/api/chat/conversations/${id}`, getToken);
-                if (res.ok) return res.json();
+                if (res.ok) {
+                    const data: ConversationDetail = await res.json();
+                    setCached(id, data);
+                    return data;
+                }
             } catch (e) {
                 console.error("Failed to load conversation:", e);
             }

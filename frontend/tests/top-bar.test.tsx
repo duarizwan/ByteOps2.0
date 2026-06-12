@@ -9,7 +9,13 @@ vi.mock("next/link", () => ({
     ),
 }));
 vi.mock("@/components/theme-provider", () => ({
-    useTheme: () => ({ resolvedTheme: "dark", setTheme: vi.fn(), theme: "dark" }),
+    useTheme: () => ({ resolvedTheme: "dark", setTheme: vi.fn(), theme: "dark", mounted: true }),
+}));
+vi.mock("@/hooks/use-tool-connections", () => ({
+    useToolConnections: () => ({ connections: [] }),
+}));
+vi.mock("@/lib/tool-capabilities", () => ({
+    TOOL_CAPABILITIES: {},
 }));
 
 import { TopBar } from "@/components/dashboard/top-bar";
@@ -28,5 +34,10 @@ describe("TopBar", () => {
             (s) => s.textContent === "b" && s.tagName === "SPAN"
         );
         expect(bSpan).toBeUndefined();
+    });
+
+    it("renders the help button in the top bar", () => {
+        render(<TopBar />);
+        expect(screen.getByRole("button", { name: /what can byteops do/i })).toBeInTheDocument();
     });
 });
