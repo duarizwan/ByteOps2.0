@@ -11,8 +11,8 @@ tool-agents (Gmail, Calendar, GitHub, etc.) as sub-routines.
 import asyncio
 import logging
 import string
-from app.agents.response_format import RESPONSE_FORMAT
-from app.core.llm_client import get_llm_client, RateLimitError
+from app.agents.response_format import RESPONSE_FORMAT, HANDOFF_PREFIX
+from app.core.llm_client import get_llm_client, RateLimitError, TextBlock
 
 logger = logging.getLogger(__name__)
 
@@ -58,16 +58,15 @@ _DROPBOX_KEYWORDS = {
 }
 
 
-def detect_intent(message: str, history: list[dict] | None = None) -> str:
-    """Fast keyword-based intent detection — no LLM call needed.
+_VALID_INTENTS = {"gmail", "calendar", "github", "slack", "jira", "dropbox", "general"}
 
-    Returns one of: 'gmail', 'calendar', 'github', 'general'.
-    """
-    lower = message.lower()
-    clean_lower = lower.translate(_PUNCT_TRANSLATOR)
-    words = set(clean_lower.split())
+# Tie-break / fallback priority — gmail last because its keyword set contains the
+# most generic words (sent, reply, draft, thread…), making it greedy otherwise.
+_SERVICE_PRIORITY = ("calendar", "github", "slack", "jira", "dropbox", "gmail")
 
-    # ── Step 1: Explicit service name (highest priority) ─────────────────────
+
+def _explicit_service(lower: str) -> str | None:
+    """Return the service whose name is mentioned verbatim in the message."""
     if "calendar" in lower or "google calendar" in lower:
         return "calendar"
     if "github" in lower or "open prs" in lower:
@@ -80,9 +79,11 @@ def detect_intent(message: str, history: list[dict] | None = None) -> str:
         return "dropbox"
     if "gmail" in lower or "my inbox" in lower or "my emails" in lower:
         return "gmail"
+    return None
 
-    # ── Step 2: Score-based keyword matching ──────────────────────────────────
-    scores = {
+
+def _keyword_scores(words: set[str]) -> dict[str, int]:
+    return {
         "gmail":    len(words & _GMAIL_KEYWORDS),
         "calendar": len(words & _CALENDAR_KEYWORDS),
         "github":   len(words & _GITHUB_KEYWORDS),
@@ -90,9 +91,28 @@ def detect_intent(message: str, history: list[dict] | None = None) -> str:
         "jira":     len(words & _JIRA_KEYWORDS),
         "dropbox":  len(words & _DROPBOX_KEYWORDS),
     }
+
+
+def detect_intent(message: str, history: list[dict] | None = None) -> str:
+    """Fast keyword-based intent detection — no LLM call needed.
+
+    Returns one of: 'gmail', 'calendar', 'github', 'slack', 'jira',
+    'dropbox', 'general'.
+    """
+    lower = message.lower()
+    clean_lower = lower.translate(_PUNCT_TRANSLATOR)
+    words = set(clean_lower.split())
+
+    # ── Step 1: Explicit service name (highest priority) ─────────────────────
+    explicit = _explicit_service(lower)
+    if explicit:
+        return explicit
+
+    # ── Step 2: Score-based keyword matching ──────────────────────────────────
+    scores = _keyword_scores(words)
     top = max(scores.values())
     if top > 0:
-        for service in ("calendar", "github", "slack", "jira", "dropbox", "gmail"):
+        for service in _SERVICE_PRIORITY:
             if scores[service] == top:
                 return service
 
@@ -108,18 +128,112 @@ def detect_intent(message: str, history: list[dict] | None = None) -> str:
             last_clean = last_lower.translate(_PUNCT_TRANSLATOR)
             last_words = set(last_clean.split())
 
-            for svc, kws, name_check in [
-                ("gmail",    _GMAIL_KEYWORDS,    "gmail"),
-                ("calendar", _CALENDAR_KEYWORDS, "calendar"),
-                ("github",   _GITHUB_KEYWORDS,   "github"),
-                ("slack",    _SLACK_KEYWORDS,    "slack"),
-                ("jira",     _JIRA_KEYWORDS,     "jira"),
-                ("dropbox",  _DROPBOX_KEYWORDS,  "dropbox"),
+            for svc, kws in [
+                ("calendar", _CALENDAR_KEYWORDS),
+                ("github",   _GITHUB_KEYWORDS),
+                ("slack",    _SLACK_KEYWORDS),
+                ("jira",     _JIRA_KEYWORDS),
+                ("dropbox",  _DROPBOX_KEYWORDS),
+                ("gmail",    _GMAIL_KEYWORDS),
             ]:
-                if name_check in last_lower or last_words & kws:
+                if svc in last_lower or last_words & kws:
                     return svc
 
     return "general"
+
+
+_ROUTER_SYSTEM_PROMPT = """\
+You are the intent router for ByteOps, an assistant connected to Gmail, Google \
+Calendar, GitHub, Slack, Jira, and Dropbox.
+
+Classify the LATEST user message into exactly one label:
+- gmail    — email: reading, searching, sending, replying, forwarding, drafts, labels
+- calendar — events, meetings, schedules, availability, calendar reminders
+- github   — repositories, pull requests, code review, commits, branches, GitHub issues
+- slack    — Slack channels, DMs, workspace messages, threads, reactions
+- jira     — Jira tickets, sprints, boards, backlog, epics, stories, JQL
+- dropbox  — files and folders in cloud storage, uploads, downloads, shared links
+- general  — greetings, small talk, general knowledge, writing or coding help, \
+questions about ByteOps itself, or anything that does not clearly belong to one service
+
+Rules:
+- Use the conversation context to resolve short follow-ups (e.g. "delete the second \
+one" right after a list of emails → gmail).
+- If the message spans two services, pick the one needed to START the task.
+- If genuinely unclear, answer general.
+
+Respond with ONLY the label, nothing else."""
+
+
+async def detect_intent_smart(message: str, history: list[dict] | None = None) -> str:
+    """Context-aware intent detection.
+
+    Resolution order:
+      1. Explicit service name in the message — free and unambiguous.
+      2. Keyword scoring with a dominant winner — fast path, no LLM call.
+      3. LLM classification over recent conversation context.
+      4. Keyword router (`detect_intent`) if the LLM call fails.
+    """
+    lower = message.lower()
+    explicit = _explicit_service(lower)
+    if explicit:
+        return explicit
+
+    words = set(lower.translate(_PUNCT_TRANSLATOR).split())
+    scores = _keyword_scores(words)
+    ranked = sorted(scores.values(), reverse=True)
+    if ranked[0] >= 2 and ranked[0] - ranked[1] >= 2:
+        for service in _SERVICE_PRIORITY:
+            if scores[service] == ranked[0]:
+                return service
+
+    try:
+        llm = get_llm_client()
+        recent = [m for m in (history or []) if m.get("content")][-6:]
+        # The latest user message is usually already persisted as the last
+        # history entry — don't repeat it in the context block.
+        if recent and recent[-1].get("role") == "user" and recent[-1]["content"] == message:
+            recent = recent[:-1]
+        context = "\n".join(
+            f"{m['role']}: {str(m['content'])[:300]}" for m in recent
+        ) or "(no prior messages)"
+        response = await llm.create_message(
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Recent conversation:\n{context}\n\n"
+                    f"Latest user message: {message[:500]}\n\nLabel:"
+                ),
+            }],
+            system=_ROUTER_SYSTEM_PROMPT,
+            max_tokens=10,
+        )
+        label = "".join(
+            b.text for b in response.content if isinstance(b, TextBlock)
+        ).strip().strip(" .`'\"").lower()
+        if label in _VALID_INTENTS:
+            return label
+        logger.warning("Intent router returned unknown label %r — using keyword fallback", label)
+    except Exception as exc:  # noqa: BLE001 — routing must never break chat
+        logger.warning("LLM intent routing failed (%s) — using keyword fallback", exc)
+
+    return detect_intent(message, history)
+
+
+def parse_handoff(text: str | None) -> str | None:
+    """Return the handoff target if `text` is a specialist handoff sentinel.
+
+    Returns None for normal responses. An unknown target maps to 'general' so
+    the raw sentinel is never shown to the user.
+    """
+    if not text:
+        return None
+    stripped = text.strip().strip("`*")
+    if not stripped.upper().startswith(HANDOFF_PREFIX):
+        return None
+    target = stripped[len(HANDOFF_PREFIX):].strip().strip(" .`'\"").lower()
+    target = target.split()[0] if target else ""
+    return target if target in _VALID_INTENTS else "general"
 
 
 # ── Tool capability registry ──────────────────────────────────────────────────

@@ -26,7 +26,12 @@ from mcp.client.stdio import stdio_client, get_default_environment
 from app.core.config import get_settings
 from app.core.llm_client import get_llm_client, TextBlock, ToolUseBlock, RateLimitError
 from app.models.tool_connection import ToolConnection
-from app.agents.response_format import RESPONSE_FORMAT, PLATFORM_LINKS
+from app.agents.response_format import (
+    RESPONSE_FORMAT,
+    PLATFORM_LINKS,
+    HANDOFF_PREFIX,
+    scope_handoff,
+)
 from app.services.agent_runtime import policy_aware_call_tool
 
 
@@ -41,12 +46,7 @@ Guidelines:
   always confirm the full details with the user before calling the tool unless
   they have already explicitly confirmed.
 - If a tool returns an error, explain it clearly and suggest what to do next.
-
-IMPORTANT — Scope:
-- You only handle Gmail. You have NO access to Google Calendar, GitHub, Slack, or any other service.
-- If the user asks about anything outside Gmail, respond with one short sentence:
-  "I only handle Gmail — send a new message and the routing system will get you to the right tool."
-""" + RESPONSE_FORMAT + PLATFORM_LINKS
+""" + scope_handoff("Gmail") + RESPONSE_FORMAT + PLATFORM_LINKS
 
 
 async def run_gmail_agent(
@@ -133,6 +133,11 @@ async def run_gmail_agent(
                             tool_use_blocks.append(block)
 
                     if text_content:
+                        stripped = text_content.strip()
+                        if stripped.upper().startswith(HANDOFF_PREFIX) and not tool_use_blocks:
+                            # Out-of-scope request — return the sentinel so chat.py
+                            # re-dispatches; the user never sees it.
+                            return stripped
                         await queue.put(text_content)
 
                     llm.append_response(messages, response)

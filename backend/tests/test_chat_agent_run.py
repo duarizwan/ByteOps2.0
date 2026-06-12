@@ -54,7 +54,7 @@ def test_chat_sse_stream_surfaces_task_crashes_before_timeout():
 
 def test_chat_workflow_requests_always_emit_reviewable_drafts():
     source = Path("app/api/chat.py").read_text(encoding="utf-8")
-    workflow_branch = source[source.index('if intent == "workflow":'):source.index('elif intent == "gmail":')]
+    workflow_branch = source[source.index('if intent == "workflow":'):source.index('async def dispatch_once')]
 
     assert "workflow_draft_response(draft)" in workflow_branch
     assert 'await queue.put(("workflow_draft"' in workflow_branch

@@ -19,7 +19,12 @@ from mcp.client.stdio import stdio_client, get_default_environment
 
 from app.core.llm_client import get_llm_client, TextBlock, ToolUseBlock, RateLimitError
 from app.models.tool_connection import ToolConnection
-from app.agents.response_format import RESPONSE_FORMAT, PLATFORM_LINKS
+from app.agents.response_format import (
+    RESPONSE_FORMAT,
+    PLATFORM_LINKS,
+    HANDOFF_PREFIX,
+    scope_handoff,
+)
 from app.services.agent_runtime import policy_aware_call_tool
 
 
@@ -40,7 +45,7 @@ update_issue, update_pr, close_pr, comment_on_issue):
 - Always confirm the key details with the user before executing any write action.
 - For merge_pr: state the repo, PR number, and merge method before calling.
 - For create_repo: confirm name and visibility (public/private) before calling.
-""" + RESPONSE_FORMAT + PLATFORM_LINKS
+""" + scope_handoff("GitHub") + RESPONSE_FORMAT + PLATFORM_LINKS
 
 
 async def run_github_agent(
@@ -109,6 +114,11 @@ async def run_github_agent(
                             tool_use_blocks.append(block)
 
                     if text_content:
+                        stripped = text_content.strip()
+                        if stripped.upper().startswith(HANDOFF_PREFIX) and not tool_use_blocks:
+                            # Out-of-scope request — return the sentinel so chat.py
+                            # re-dispatches; the user never sees it.
+                            return stripped
                         await queue.put(text_content)
 
                     llm.append_response(messages, response)

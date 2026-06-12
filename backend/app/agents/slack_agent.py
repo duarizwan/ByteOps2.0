@@ -19,7 +19,12 @@ from mcp.client.stdio import stdio_client, get_default_environment
 
 from app.core.llm_client import get_llm_client, TextBlock, ToolUseBlock, RateLimitError
 from app.models.tool_connection import ToolConnection
-from app.agents.response_format import RESPONSE_FORMAT, PLATFORM_LINKS
+from app.agents.response_format import (
+    RESPONSE_FORMAT,
+    PLATFORM_LINKS,
+    HANDOFF_PREFIX,
+    scope_handoff,
+)
 from app.services.agent_runtime import policy_aware_call_tool
 
 
@@ -35,7 +40,7 @@ calling the tool unless they have already explicitly confirmed.
 - For delete_message and update_message, always confirm with the user first.
 - If a tool returns an error (e.g., missing scope), explain it and suggest reconnecting Slack \
 in Settings → Connections with the required scopes.
-""" + RESPONSE_FORMAT + PLATFORM_LINKS
+""" + scope_handoff("Slack") + RESPONSE_FORMAT + PLATFORM_LINKS
 
 
 async def run_slack_agent(
@@ -104,6 +109,11 @@ async def run_slack_agent(
                             tool_use_blocks.append(block)
 
                     if text_content:
+                        stripped = text_content.strip()
+                        if stripped.upper().startswith(HANDOFF_PREFIX) and not tool_use_blocks:
+                            # Out-of-scope request — return the sentinel so chat.py
+                            # re-dispatches; the user never sees it.
+                            return stripped
                         await queue.put(text_content)
 
                     llm.append_response(messages, response)

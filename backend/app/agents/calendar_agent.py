@@ -25,7 +25,12 @@ from mcp.client.stdio import stdio_client, get_default_environment
 from app.core.config import get_settings
 from app.core.llm_client import get_llm_client, TextBlock, ToolUseBlock, RateLimitError
 from app.models.tool_connection import ToolConnection
-from app.agents.response_format import RESPONSE_FORMAT, PLATFORM_LINKS
+from app.agents.response_format import (
+    RESPONSE_FORMAT,
+    PLATFORM_LINKS,
+    HANDOFF_PREFIX,
+    scope_handoff,
+)
 from app.services.agent_runtime import policy_aware_call_tool
 
 
@@ -54,7 +59,7 @@ Confirmation rules:
 If a tool returns a permission error (403), tell the user:
   "Your Calendar connection needs to be reconnected with full access. Please go to
    Settings → Connections, disconnect Calendar, and reconnect it."
-""" + RESPONSE_FORMAT + PLATFORM_LINKS
+""" + scope_handoff("Google Calendar") + RESPONSE_FORMAT + PLATFORM_LINKS
 
 
 async def run_calendar_agent(
@@ -141,6 +146,11 @@ async def run_calendar_agent(
                             tool_use_blocks.append(block)
 
                     if text_content:
+                        stripped = text_content.strip()
+                        if stripped.upper().startswith(HANDOFF_PREFIX) and not tool_use_blocks:
+                            # Out-of-scope request — return the sentinel so chat.py
+                            # re-dispatches; the user never sees it.
+                            return stripped
                         await queue.put(text_content)
 
                     llm.append_response(messages, response)

@@ -30,7 +30,7 @@ from app.models.conversation import Conversation
 from app.models.message import Message, MessageRole
 from app.models.tool_connection import ToolConnection, ToolType, ConnectionStatus
 
-from app.agents.orchestrator import detect_intent, stream_general_response
+from app.agents.orchestrator import detect_intent_smart, parse_handoff, stream_general_response
 from app.agents.gmail_agent import run_gmail_agent
 from app.agents.calendar_agent import run_calendar_agent
 from app.agents.github_agent import run_github_agent
@@ -56,6 +56,54 @@ from app.services.workflow_creation import (
 )
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
+
+# ── Specialist dispatch table ─────────────────────────────────────────────────
+# One entry per tool-agent. "refresh" marks OAuth tokens that expire and must be
+# refreshed before spawning the MCP subprocess.
+_SPECIALISTS: dict[str, dict] = {
+    "gmail": {
+        "tool_type": ToolType.GMAIL,
+        "runner": run_gmail_agent,
+        "feature_name": "Gmail",
+        "connect_hint": "your Gmail account first",
+        "refresh": True,
+    },
+    "calendar": {
+        "tool_type": ToolType.CALENDAR,
+        "runner": run_calendar_agent,
+        "feature_name": "Calendar",
+        "connect_hint": "your Google Calendar account",
+        "refresh": True,
+    },
+    "github": {
+        "tool_type": ToolType.GITHUB,
+        "runner": run_github_agent,
+        "feature_name": "GitHub",
+        "connect_hint": "your GitHub account",
+        "refresh": False,
+    },
+    "slack": {
+        "tool_type": ToolType.SLACK,
+        "runner": run_slack_agent,
+        "feature_name": "Slack",
+        "connect_hint": "your Slack workspace",
+        "refresh": False,
+    },
+    "jira": {
+        "tool_type": ToolType.JIRA,
+        "runner": run_jira_agent,
+        "feature_name": "Jira",
+        "connect_hint": "your Jira account",
+        "refresh": True,
+    },
+    "dropbox": {
+        "tool_type": ToolType.DROPBOX,
+        "runner": run_dropbox_agent,
+        "feature_name": "Dropbox",
+        "connect_hint": "your Dropbox account",
+        "refresh": False,
+    },
+}
 
 CHAT_STREAM_IDLE_TIMEOUT_SECONDS = 30
 
@@ -156,7 +204,7 @@ async def _save_activity_notification(
 ) -> None:
     """Persist a chat-triggered tool interaction as a notification so it
     surfaces in the right-panel Alerts / Tasks feed."""
-    if not response_text:
+    if not response_text or parse_handoff(response_text):
         return
     # Skip "please connect" or error responses
     snippet = response_text.lower()[:120]
@@ -272,7 +320,7 @@ async def _run_chat(
         ]
 
         # ── 4. Route based on intent ──────────────────────────────────────────
-        intent = "workflow" if is_workflow_creation_request(request.message) else detect_intent(request.message, history)
+        intent = "workflow" if is_workflow_creation_request(request.message) else await detect_intent_smart(request.message, history)
         full_text = ""
 
         # Query ALL connected tools once (used for routing + dynamic prompt)
@@ -322,155 +370,68 @@ async def _run_chat(
                 input={"message": request.message},
                 output=draft,
             )
-        elif intent == "gmail":
-            gmail_conn = next(
-                (c for c in all_connections if c.tool_type == ToolType.GMAIL), None
-            )
-            if not gmail_conn:
-                full_text = (
-                    "To use Gmail features, please connect your Gmail account first "
-                    "via **Settings → Connections**."
-                )
-                await queue.put(full_text)
-            else:
-                # Refresh token before spawning the MCP subprocess (tokens expire in 1h)
-                token_ok = await ensure_fresh_token(gmail_conn, db)
-                if not token_ok:
-                    full_text = (
-                        "Your Gmail connection has expired. Please reconnect via "
-                        "**Settings → Connections**."
-                    )
-                    await queue.put(full_text)
-                else:
-                    full_text = await run_gmail_agent(
-                        user_message=request.message,
-                        history=history,
-                        tool_connection=gmail_conn,
-                        queue=queue,
-                        run_id=agent_run.id,
-                        db=db,
-                    )
-                    await _save_activity_notification(db, current_user.id, "gmail", request.message, full_text)
-        elif intent == "calendar":
-            calendar_conn = next(
-                (c for c in all_connections if c.tool_type == ToolType.CALENDAR), None
-            )
-            if not calendar_conn:
-                full_text = (
-                    "To use Calendar features, please connect your Google Calendar account "
-                    "via **Settings → Connections**."
-                )
-                await queue.put(full_text)
-            else:
-                token_ok = await ensure_fresh_token(calendar_conn, db)
-                if not token_ok:
-                    full_text = (
-                        "Your Calendar connection has expired. Please reconnect via "
-                        "**Settings → Connections**."
-                    )
-                    await queue.put(full_text)
-                else:
-                    full_text = await run_calendar_agent(
-                        user_message=request.message,
-                        history=history,
-                        tool_connection=calendar_conn,
-                        queue=queue,
-                        run_id=agent_run.id,
-                        db=db,
-                    )
-                    await _save_activity_notification(db, current_user.id, "calendar", request.message, full_text)
-        elif intent == "github":
-            github_conn = next(
-                (c for c in all_connections if c.tool_type == ToolType.GITHUB), None
-            )
-            if not github_conn:
-                full_text = (
-                    "To use GitHub features, please connect your GitHub account "
-                    "via **Settings → Connections**."
-                )
-                await queue.put(full_text)
-            else:
-                full_text = await run_github_agent(
-                    user_message=request.message,
-                    history=history,
-                    tool_connection=github_conn,
-                    queue=queue,
-                    run_id=agent_run.id,
-                    db=db,
-                )
-                await _save_activity_notification(db, current_user.id, "github", request.message, full_text)
-        elif intent == "slack":
-            slack_conn = next(
-                (c for c in all_connections if c.tool_type == ToolType.SLACK), None
-            )
-            if not slack_conn:
-                full_text = (
-                    "To use Slack features, please connect your Slack workspace "
-                    "via **Settings → Connections**."
-                )
-                await queue.put(full_text)
-            else:
-                full_text = await run_slack_agent(
-                    user_message=request.message,
-                    history=history,
-                    tool_connection=slack_conn,
-                    queue=queue,
-                    run_id=agent_run.id,
-                    db=db,
-                )
-                await _save_activity_notification(db, current_user.id, "slack", request.message, full_text)
-        elif intent == "jira":
-            jira_conn = next(
-                (c for c in all_connections if c.tool_type == ToolType.JIRA), None
-            )
-            if not jira_conn:
-                full_text = (
-                    "To use Jira features, please connect your Jira account "
-                    "via **Settings → Connections**."
-                )
-                await queue.put(full_text)
-            else:
-                token_ok = await ensure_fresh_token(jira_conn, db)
-                if not token_ok:
-                    full_text = (
-                        "Your Jira connection has expired. Please reconnect via "
-                        "**Settings → Connections**."
-                    )
-                    await queue.put(full_text)
-                else:
-                    full_text = await run_jira_agent(
-                        user_message=request.message,
-                        history=history,
-                        tool_connection=jira_conn,
-                        queue=queue,
-                        run_id=agent_run.id,
-                        db=db,
-                    )
-                    await _save_activity_notification(db, current_user.id, "jira", request.message, full_text)
-        elif intent == "dropbox":
-            dropbox_conn = next(
-                (c for c in all_connections if c.tool_type == ToolType.DROPBOX), None
-            )
-            if not dropbox_conn:
-                full_text = (
-                    "To use Dropbox features, please connect your Dropbox account "
-                    "via **Settings → Connections**."
-                )
-                await queue.put(full_text)
-            else:
-                full_text = await run_dropbox_agent(
-                    user_message=request.message,
-                    history=history,
-                    tool_connection=dropbox_conn,
-                    queue=queue,
-                    run_id=agent_run.id,
-                    db=db,
-                )
-                await _save_activity_notification(db, current_user.id, "dropbox", request.message, full_text)
         else:
-            full_text = await stream_general_response(
-                history, queue, connected_tools=connected_tool_names
-            )
+            async def dispatch_once(active_intent: str) -> str:
+                """Run one specialist (or the general orchestrator); return final text."""
+                spec = _SPECIALISTS.get(active_intent)
+                if spec is None:
+                    return await stream_general_response(
+                        history, queue, connected_tools=connected_tool_names
+                    )
+
+                conn = next(
+                    (c for c in all_connections if c.tool_type == spec["tool_type"]),
+                    None,
+                )
+                if not conn:
+                    text = (
+                        f"To use {spec['feature_name']} features, please connect "
+                        f"{spec['connect_hint']} via **Settings → Connections**."
+                    )
+                    await queue.put(text)
+                    return text
+
+                # Refresh expiring OAuth tokens before spawning the MCP subprocess
+                if spec["refresh"] and not await ensure_fresh_token(conn, db):
+                    text = (
+                        f"Your {spec['feature_name']} connection has expired. "
+                        "Please reconnect via **Settings → Connections**."
+                    )
+                    await queue.put(text)
+                    return text
+
+                text = await spec["runner"](
+                    user_message=request.message,
+                    history=history,
+                    tool_connection=conn,
+                    queue=queue,
+                    run_id=agent_run.id,
+                    db=db,
+                )
+                await _save_activity_notification(
+                    db, current_user.id, active_intent, request.message, text
+                )
+                return text
+
+            full_text = await dispatch_once(intent)
+
+            # A specialist returns a HANDOFF sentinel when the request is outside
+            # its scope — re-route once, invisibly to the user.
+            handoff_target = parse_handoff(full_text)
+            if handoff_target is not None:
+                next_intent = handoff_target if handoff_target != intent else "general"
+                await record_agent_step(
+                    db,
+                    run_id=agent_run.id,
+                    step_type=AgentRunStepType.ROUTE,
+                    name="agent_handoff",
+                    input={"from": intent, "message": request.message},
+                    output={"to": next_intent},
+                )
+                full_text = await dispatch_once(next_intent)
+                if parse_handoff(full_text) is not None:
+                    # Second handoff in a row — let the general orchestrator answer.
+                    full_text = await dispatch_once("general")
 
         # ── 5. Persist assistant reply ────────────────────────────────────────
         db.add(Message(
