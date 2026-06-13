@@ -38,9 +38,14 @@ export const EllipseNode = memo(function EllipseNode({ data, selected }: NodePro
 
     const Icon = ICONS[d.nodeType] ?? Wrench;
 
-    const boxShadow = selected
+    const heat = d.anomalyScore;
+    const heatLevel = heat == null ? null : heat >= 0.66 ? "high" : heat >= 0.33 ? "medium" : "low";
+    const heatColor = heatLevel === "high" ? "#EF4444" : heatLevel === "medium" ? "#F97316" : "#FACC15";
+
+    const heatGlow = heatLevel ? `, 0 0 26px ${heatColor}${heatLevel === "high" ? "AA" : "66"}` : "";
+    const boxShadow = (selected
         ? `0 0 0 2px ${borderColor}80, 0 0 28px ${borderColor}40`
-        : `0 0 0 1px ${borderColor}26, 0 0 20px ${borderColor}18`;
+        : `0 0 0 1px ${borderColor}26, 0 0 20px ${borderColor}18`) + heatGlow;
 
     return (
         <>
@@ -59,6 +64,17 @@ export const EllipseNode = memo(function EllipseNode({ data, selected }: NodePro
                 textAlign: "center",
                 transition: "box-shadow 0.2s ease",
             }}>
+                {heatLevel && (
+                    <span
+                        data-anomaly={heatLevel}
+                        title={`Anomaly score: ${(heat as number).toFixed(2)}`}
+                        style={{
+                            position: "absolute", top: -6, right: -6, width: 12, height: 12,
+                            borderRadius: "50%", background: heatColor,
+                            boxShadow: `0 0 8px ${heatColor}`, border: "1.5px solid var(--card)",
+                        }}
+                    />
+                )}
                 {d.borderDashed && (
                     <svg
                         style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", overflow: "visible", borderRadius: 14 }}
