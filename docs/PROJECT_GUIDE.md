@@ -174,6 +174,10 @@ for real oversight.
 # 2. export your real runs to a dataset
 .venv/Scripts/python.exe scripts/export_runs.py --out data/runs.jsonl
 
+# 2b. add the synthetic red-team class (REQUIRED after every export — export
+#     overwrites the file, and aligned agents won't produce real attack runs)
+.venv/Scripts/python.exe scripts/make_redteam.py --append data/runs.jsonl --n 25
+
 # 3. train your model (makes the live anomaly marker work)
 .venv/Scripts/python.exe scripts/train_anomaly.py --data data/runs.jsonl --epochs 30
 
