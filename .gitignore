@@ -25,3 +25,6 @@ __pycache__/
 # ML experiment tracking + exported training data
 mlruns/
 backend/data/
+
+# Nested standalone project (its own git repo)
+agentsop/
