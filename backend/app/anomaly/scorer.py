@@ -50,6 +50,43 @@ class AnomalyScorer:
 
     def score_run(self, steps: list[dict]) -> dict | None:
         """Return {anomaly_score, step_scores, flagged} or None if unavailable."""
-        if not self.available:
+        if not self.available or not steps:
             return None
-        return None  # real inference added in a later task
+        try:
+            import numpy as np
+
+            max_len = int(self._meta.get("max_len", 12))
+            threshold = float(self._meta.get("threshold", 0.0))
+            tokens = run_to_tokens(steps)
+            ids = encode_tokens(tokens, self._vocab, max_len)
+            arr = np.asarray([ids], dtype=np.int64)
+            (logits,) = self._session.run(["logits"], {"tokens": arr})
+            logits = logits[0]  # [max_len, vocab_size]
+
+            # log-softmax along vocab axis
+            m = logits.max(axis=-1, keepdims=True)
+            log_probs = logits - m - np.log(np.exp(logits - m).sum(axis=-1, keepdims=True))
+
+            n = min(len(steps), max_len)
+            nlls: list[float] = []
+            for i in range(1, n):
+                nlls.append(float(-log_probs[i - 1, ids[i]]))
+            mean_nll = float(np.mean(nlls)) if nlls else 0.0
+
+            step_scores: dict[str, float] = {}
+            for idx, step in enumerate(steps):
+                sid = str(step.get("id", idx))
+                if idx == 0 or idx >= max_len:
+                    step_scores[sid] = round(mean_nll, 4)
+                else:
+                    step_scores[sid] = round(float(-log_probs[idx - 1, ids[idx]]), 4)
+
+            session_score = max(step_scores.values()) if step_scores else 0.0
+            return {
+                "anomaly_score": round(float(session_score), 4),
+                "step_scores": step_scores,
+                "flagged": bool(session_score >= threshold),
+            }
+        except Exception as exc:  # noqa: BLE001 - never break the run
+            logger.warning("Anomaly scoring failed: %s", exc)
+            return None
