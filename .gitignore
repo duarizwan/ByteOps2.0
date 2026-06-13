@@ -32,3 +32,7 @@ agentsop/
 # MLflow sqlite backend
 backend/mlflow.db
 mlflow.db
+
+# Generated report artifacts
+backend/outputs/
+outputs/
