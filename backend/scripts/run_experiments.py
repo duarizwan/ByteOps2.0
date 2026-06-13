@@ -78,6 +78,103 @@ def _shuffle_tokens(seqs, rng):
     return out
 
 
+# ── supervised ablation trainer (feature-based BiLSTM/Transformer) ─────────────
+
+def _supervised_scores_ablation(model_name, train, test, *, shuffle=False, zero_num=False,
+                                attention=True, max_len=20, epochs=40, seed=42):
+    """Train a feature model with optional ablation flags; return test anomaly scores.
+
+    Mirrors evaluate_detectors.supervised_scores, adding:
+      shuffle=True   -> permute each run's steps before encoding (kills order signal)
+      zero_num=True  -> zero the numeric feature block (kills risk-level/external/etc.)
+      attention=False-> mean-pool LSTM outputs instead of attending (BiLSTM only)
+    """
+    import random
+    import torch
+    import torch.nn as nn
+    from app.anomaly.features import build_feature_vocabs, encode_run, CATEGORICAL_FIELDS, NUMERIC_FEATURES
+    from app.anomaly.models import BiLSTMAttention, TransformerEncoderClassifier
+    torch.manual_seed(seed)
+
+    def prep(items):
+        out = []
+        for r in items:
+            steps = list(r["steps"])
+            if shuffle:
+                random.Random(seed).shuffle(steps)
+            out.append({**r, "steps": steps})
+        return out
+
+    train, test = prep(train), prep(test)
+    vocabs = build_feature_vocabs([r["steps"] for r in train])
+    vsz = {f: len(vocabs[f]) for f in CATEGORICAL_FIELDS}
+
+    def batch(items):
+        enc = [encode_run(r["steps"], vocabs, max_len) for r in items]
+        cat = {f: torch.tensor([e["cat"][f] for e in enc]) for f in CATEGORICAL_FIELDS}
+        num = torch.tensor([e["num"] for e in enc], dtype=torch.float32)
+        if zero_num:
+            num = torch.zeros_like(num)
+        mask = torch.tensor([e["mask"] for e in enc], dtype=torch.float32)
+        y = torch.tensor([1.0 if r["label"] == "redteam" else 0.0 for r in items])
+        return cat, num, mask, y
+
+    if model_name == "transformer":
+        model = TransformerEncoderClassifier(vsz, len(NUMERIC_FEATURES))
+    else:
+        model = BiLSTMAttention(vsz, len(NUMERIC_FEATURES))
+        if not attention:
+            import types
+
+            def mp_forward(self, cat, num, mask):
+                x = self.embed(cat, num)
+                out, _ = self.lstm(x)
+                m = mask.unsqueeze(-1)
+                ctx = (out * m).sum(1) / m.sum(1).clamp(min=1)
+                return self.head(self.drop(ctx)).squeeze(-1), mask
+
+            model.forward = types.MethodType(mp_forward, model)
+
+    opt = torch.optim.Adam(model.parameters(), lr=1e-3)
+    cat_tr, num_tr, mask_tr, y_tr = batch(train)
+    n_pos = max(1.0, float((y_tr == 1).sum())); n_neg = max(1.0, float((y_tr == 0).sum()))
+    loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(n_neg / n_pos))
+    model.train()
+    for _ in range(epochs):
+        perm = torch.randperm(y_tr.shape[0])
+        for i in range(0, y_tr.shape[0], 32):
+            bi = perm[i:i + 32]
+            cb = {f: cat_tr[f][bi] for f in CATEGORICAL_FIELDS}
+            opt.zero_grad()
+            logit, _ = model(cb, num_tr[bi], mask_tr[bi])
+            loss_fn(logit, y_tr[bi]).backward()
+            opt.step()
+    model.eval()
+    cat_te, num_te, mask_te, _ = batch(test)
+    with torch.no_grad():
+        logit, _ = model(cat_te, num_te, mask_te)
+        return torch.sigmoid(logit).numpy()
+
+
+def _iso_scores_tokens(train, test, seed):
+    """Classical Isolation Forest baseline on simple token-derived features."""
+    from sklearn.ensemble import IsolationForest
+    from app.anomaly.tokenizer import run_to_tokens
+
+    def feats(items):
+        rows = []
+        for s in items:
+            toks = s.get("tokens") or run_to_tokens(s.get("steps", []))
+            n = len(toks) or 1
+            ext = sum(1 for t in toks if "external_send" in t or "destructive" in t)
+            rows.append([n, ext / n, len(set(toks)) / n])
+        return np.array(rows) if items else np.zeros((0, 3))
+
+    iso = IsolationForest(n_estimators=200, contamination=0.2, random_state=seed)
+    iso.fit(feats(train))
+    return -iso.decision_function(feats(test))
+
+
 # ── core: train an LSTM, return held-out val NLL + a per-run scorer ───────────
 
 def train_lstm(train, val, vocab, max_len, hidden, embed, epochs, seed):
@@ -168,7 +265,14 @@ def main() -> None:
     parser.add_argument("--epochs", type=int, default=20)
     args = parser.parse_args()
 
+    from app.anomaly.tokenizer import run_to_tokens  # noqa: E402
+
     seqs = [json.loads(l) for l in Path(args.data).read_text(encoding="utf-8").splitlines() if l.strip()]
+    # Label-free experiments operate on flat token sequences; derive them from rich
+    # `steps` when a dataset (e.g. generate_dataset.py output) ships without `tokens`.
+    for s in seqs:
+        if "tokens" not in s:
+            s["tokens"] = run_to_tokens(s.get("steps", []))
     normal = [s for s in seqs if s["label"] in ("normal", "unlabeled")]
     redteam = [s for s in seqs if s["label"] == "redteam"]
     if len(normal) < 6:
@@ -190,7 +294,7 @@ def main() -> None:
     mlflow.start_run()  # one run for the whole suite; metrics + report logged into it
 
     # ── Experiment 1: order ablation (ordered vs shuffled) ──
-    print("\n[1/3] Order ablation (ordered vs shuffled)...")
+    print("\n[1/5] Order ablation (ordered vs shuffled)...")
     ordered_nlls, shuffled_nlls = [], []
     for seed in range(args.seeds):
         tr, va = split(normal, seed)
@@ -212,7 +316,7 @@ def main() -> None:
     mlflow.log_metric("order_shuffled_val_nll", ms)
 
     # ── Experiment 2: sequence-length sensitivity ──
-    print("[2/3] Sequence-length sensitivity (8/12/20)...")
+    print("[2/5] Sequence-length sensitivity (8/12/20)...")
     lines += ["\n## 2. Sequence-length sensitivity\n", "| max_len | Val NLL (mean +/- 95% CI) |\n|---|---|"]
     for ml in (8, 12, 20):
         nlls = []
@@ -226,7 +330,7 @@ def main() -> None:
         mlflow.log_metric(f"seqlen_{ml}_val_nll", m)
 
     # ── Experiment 3: model capacity ──
-    print("[3/3] Model capacity (hidden 16/48/96)...")
+    print("[3/5] Model capacity (hidden 16/48/96)...")
     lines += ["\n## 3. Model capacity (hidden size)\n", "| hidden | Val NLL (mean +/- 95% CI) |\n|---|---|"]
     for hid in (16, 48, 96):
         nlls = []
@@ -263,6 +367,87 @@ def main() -> None:
                 name = f"{rule}" + (f"(k={k})" if rule == "topk" else "")
                 lines.append(f"| {name} | {m:.3f} +/- {c:.3f} |")
                 mlflow.log_metric(f"score_{rule}{k}_pauroc", m)
+
+    # ── Supervised ablations (feature-based models; needs red-team labels) ──
+    lines += ["\n## Supervised ablations\n"]
+    if not redteam or len(redteam) < 2 or len(normal) < 2:
+        lines.append("_Skipped: need >=2 normal and >=2 red-team runs for a supervised "
+                      "70/30-by-class split. Generate/label more data and re-run._\n")
+        print("[5] Supervised ablations SKIPPED (insufficient labeled data).")
+    else:
+        print("[5/5] Supervised ablations (order/risk-features/attention/arch/classical)...")
+        lines += ["Metric = partial AUROC at FPR<0.2 on a held-out 70/30-by-class test "
+                  "split (both classes in train), mean +/- 95% CI over seeds.\n"]
+
+        def class_split(seed):
+            """70/30 split per class; both classes present in train and test."""
+            rng = np.random.default_rng(seed)
+            ni = rng.permutation(len(normal)); ri = rng.permutation(len(redteam))
+            ncut = max(1, int(0.7 * len(normal))); rcut = max(1, int(0.7 * len(redteam)))
+            n_tr = [normal[i] for i in ni[:ncut]]
+            n_te = [normal[i] for i in ni[ncut:]] or [normal[ni[0]]]
+            r_tr = [redteam[i] for i in ri[:rcut]]
+            r_te = [redteam[i] for i in ri[rcut:]] or [redteam[ri[0]]]
+            train = n_tr + r_tr
+            test = n_te + r_te
+            labels = np.array([0] * len(n_te) + [1] * len(r_te))
+            return train, test, labels
+
+        def run_variant(label, key, **kwargs):
+            """Train the variant over all seeds, append a table row, log to MLflow."""
+            pas = []
+            for seed in range(args.seeds):
+                train, test, labels = class_split(seed)
+                if kwargs.get("_iso"):
+                    scores = _iso_scores_tokens(train, test, seed)
+                else:
+                    scores = _supervised_scores_ablation(
+                        kwargs["model_name"], train, test,
+                        shuffle=kwargs.get("shuffle", False),
+                        zero_num=kwargs.get("zero_num", False),
+                        attention=kwargs.get("attention", True),
+                        epochs=args.epochs, seed=seed,
+                    )
+                pa = partial_auroc(labels, np.asarray(scores, dtype=float))
+                if not np.isnan(pa):
+                    pas.append(pa)
+            if not pas:
+                lines.append(f"| {label} | n/a |")
+                return
+            m, c = mean_ci(pas)
+            lines.append(f"| {label} | {m:.3f} +/- {c:.3f} |")
+            mlflow.log_metric(f"ablation_{key}_pauroc", m)
+            return m
+
+        # 1) Sequence order — BiLSTM+Attention, ordered vs shuffled steps.
+        lines += ["\n### Sequence order (BiLSTM+Attention)\n",
+                  "| Variant | pAUROC@FPR<0.2 (mean +/- 95% CI) |\n|---|---|"]
+        run_variant("Ordered steps", "order_ordered", model_name="bilstm_attn", shuffle=False)
+        run_variant("Shuffled steps", "order_shuffled", model_name="bilstm_attn", shuffle=True)
+
+        # 2) Risk features — full numeric block vs zeroed numeric block.
+        lines += ["\n### Risk features (BiLSTM+Attention)\n",
+                  "| Variant | pAUROC@FPR<0.2 (mean +/- 95% CI) |\n|---|---|"]
+        run_variant("Full features", "risk_full", model_name="bilstm_attn", zero_num=False)
+        run_variant("Risk features zeroed", "risk_zeroed", model_name="bilstm_attn", zero_num=True)
+
+        # 3) Attention — attention pooling vs masked mean-pool (BiLSTM).
+        lines += ["\n### Attention vs mean-pool (BiLSTM)\n",
+                  "| Variant | pAUROC@FPR<0.2 (mean +/- 95% CI) |\n|---|---|"]
+        run_variant("BiLSTM + Attention", "attn_on", model_name="bilstm_attn", attention=True)
+        run_variant("BiLSTM mean-pool", "attn_off", model_name="bilstm_attn", attention=False)
+
+        # 4) Architecture — BiLSTM+Attention vs Transformer.
+        lines += ["\n### Architecture (BiLSTM+Attn vs Transformer)\n",
+                  "| Variant | pAUROC@FPR<0.2 (mean +/- 95% CI) |\n|---|---|"]
+        run_variant("BiLSTM + Attention", "arch_bilstm", model_name="bilstm_attn")
+        run_variant("Transformer", "arch_transformer", model_name="transformer")
+
+        # 5) Classical vs learned — Isolation Forest vs BiLSTM+Attention.
+        lines += ["\n### Classical vs learned (Isolation Forest vs BiLSTM+Attn)\n",
+                  "| Variant | pAUROC@FPR<0.2 (mean +/- 95% CI) |\n|---|---|"]
+        run_variant("Isolation Forest", "classical_iso", _iso=True)
+        run_variant("BiLSTM + Attention", "classical_bilstm", model_name="bilstm_attn")
 
     OUTPUTS.mkdir(parents=True, exist_ok=True)
     report = "\n".join(lines) + "\n"
