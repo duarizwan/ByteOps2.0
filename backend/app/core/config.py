@@ -14,6 +14,12 @@ class Settings(BaseSettings):
     # --- Database (Neon PostgreSQL) ---
     database_url: str = "postgresql+asyncpg://localhost/byteops"
 
+    # --- Secrets ---
+    # Fernet key (generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())").
+    # When set, OAuth tokens are encrypted at rest. When empty, tokens are stored
+    # plaintext (legacy behavior) — set this in production.
+    token_encryption_key: str = ""
+
     # --- Clerk Authentication ---
     clerk_secret_key: str = ""
     clerk_webhook_secret: str = ""
