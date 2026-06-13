@@ -9,9 +9,13 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
+import sys
 from pathlib import Path
 
-from app.anomaly.tokenizer import run_to_tokens
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from app.anomaly.tokenizer import run_to_tokens  # noqa: E402
 
 
 def run_record_to_sequence(record: dict) -> dict:

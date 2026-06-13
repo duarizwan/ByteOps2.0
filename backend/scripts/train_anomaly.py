@@ -11,11 +11,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 from pathlib import Path
 
 import numpy as np
 
-from app.anomaly.tokenizer import PAD, build_vocab, encode_tokens
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from app.anomaly.tokenizer import PAD, build_vocab, encode_tokens  # noqa: E402
 
 ARTIFACTS = Path(__file__).resolve().parent.parent / "app" / "anomaly" / "artifacts"
 
