@@ -23,6 +23,7 @@ import {
     Trash2,
     Workflow,
     Sparkles,
+    Clock,
 } from "lucide-react";
 import { getBrandIconUrl } from "@/lib/brand-icons";
 import { cn } from "@/lib/utils";
@@ -783,7 +784,7 @@ function cleanActivityText(text: string): string {
         .trim();
 }
 
-type Classification = "task" | "alert" | "discard";
+type Classification = "task" | "alert" | "activity" | "discard";
 
 function classifyNotification(n: Notification): Classification {
     const category = metadataString(n, "category")?.toLowerCase();
@@ -791,6 +792,10 @@ function classifyNotification(n: Notification): Classification {
     // ── Task: backend metadata first ──
     if (category && ["task", "action_item", "todo"].includes(category)) return "task";
     if (metadataBoolean(n, "action_required")) return "task";
+
+    // ── Activity: routine agent history — trust the backend's deliberate tag
+    //    and keep it OUT of Alerts (this is the quiet log). ──
+    if (category === "activity") return "activity";
 
     // ── Task: precise action phrases ──
     const text = notificationText(n);
@@ -984,7 +989,7 @@ interface ContextPanelProps {
    Component
    ======================== */
 export function ContextPanel({ isCollapsed, onToggleCollapse, onRefreshRef, onSendToAI }: ContextPanelProps) {
-    const [activeTab, setActiveTab] = useState<"workflows" | "notifications" | "tasks">("notifications");
+    const [activeTab, setActiveTab] = useState<"workflows" | "notifications" | "tasks" | "activity">("notifications");
     const [taskDayFilter, setTaskDayFilter] = useState<TaskDayFilter>("today");
     const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
     const [runningWorkflowIds, setRunningWorkflowIds] = useState<Set<string>>(() => new Set());
@@ -1066,6 +1071,7 @@ export function ContextPanel({ isCollapsed, onToggleCollapse, onRefreshRef, onSe
 
     const tasks = notifications.filter((n) => classifyNotification(n) === "task");
     const alerts = notifications.filter((n) => classifyNotification(n) === "alert");
+    const activity = notifications.filter((n) => classifyNotification(n) === "activity");
     const alertsUnread = alerts.filter((n) => !n.is_read).length;
     const tasksUnread = tasks.filter((n) => !n.is_read).length;
     const taskDayCounts = TASK_DAY_FILTERS.map((day) => ({
@@ -1080,8 +1086,9 @@ export function ContextPanel({ isCollapsed, onToggleCollapse, onRefreshRef, onSe
     if (isCollapsed) {
         const collapsedTabs = [
             { id: "notifications" as const, icon: Bell,       label: "Alerts",    badge: alertsUnread },
-            { id: "workflows" as const,     icon: Workflow,    label: "Workflows" },
             { id: "tasks" as const,         icon: ListChecks,  label: "Tasks",     badge: tasksUnread },
+            { id: "workflows" as const,     icon: Workflow,    label: "Workflows" },
+            { id: "activity" as const,      icon: Clock,       label: "Activity" },
         ];
         return (
             <div className="w-16 h-full bg-context-bg border-l border-border flex flex-col items-center py-4 gap-2 rounded-l-2xl">
@@ -1117,9 +1124,10 @@ export function ContextPanel({ isCollapsed, onToggleCollapse, onRefreshRef, onSe
     }
 
     const tabs = [
-        { id: "workflows" as const,     label: "Workflows", icon: Workflow },
         { id: "notifications" as const, label: "Alerts",    icon: Bell,       badge: alertsUnread },
         { id: "tasks" as const,         label: "Tasks",     icon: ListChecks, badge: tasksUnread },
+        { id: "workflows" as const,     label: "Workflows", icon: Workflow },
+        { id: "activity" as const,      label: "Activity",  icon: Clock },
     ];
 
     return (
@@ -1410,8 +1418,8 @@ export function ContextPanel({ isCollapsed, onToggleCollapse, onRefreshRef, onSe
                         ) : alerts.length === 0 ? (
                             <EmptyState
                                 icon={Bell}
-                                title="No alerts yet"
-                                description="Alerts appear here after you interact with connected tools via the AI chat. Try asking about your emails."
+                                title="You're all caught up"
+                                description="Alerts show only items that need your attention — urgent messages, failures, or flagged runs. Routine activity lives in the Activity tab."
                             />
                         ) : (
                             alerts.map((n) => (
@@ -1485,6 +1493,31 @@ export function ContextPanel({ isCollapsed, onToggleCollapse, onRefreshRef, onSe
                                     );
                                 })()}
                             </>
+                        )}
+                    </div>
+                )}
+
+                {/* ── Activity (quiet history of what agents did) ── */}
+                {activeTab === "activity" && (
+                    <div className="space-y-3">
+                        {isLoading ? (
+                            <NotificationSkeleton />
+                        ) : activity.length === 0 ? (
+                            <EmptyState
+                                icon={Clock}
+                                title="No activity yet"
+                                description="Routine things the AI does in your tools (summaries, lookups) are logged here — quietly, so they don't clutter your alerts."
+                            />
+                        ) : (
+                            activity.map((n) => (
+                                <NotificationCard
+                                    key={n.id}
+                                    n={n}
+                                    onMarkRead={() => markRead(n.id)}
+                                    onDismiss={() => dismiss(n.id)}
+                                    onSendToAI={handleSendToAI}
+                                />
+                            ))
                         )}
                     </div>
                 )}

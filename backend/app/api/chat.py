@@ -180,6 +180,17 @@ def _build_activity_notification_payload(
     is_high = any(cue in text for cue in _HIGH_PRIORITY_CUES)
     priority = "high" if is_high else "medium"
 
+    # Categorize deliberately. Routine agent activity is just "activity" (a quiet
+    # history item) — NOT an alert. Only genuine signal escalates to "alert", and
+    # actionable items become "task". This prevents the alerts feed from drowning
+    # in normal tool interactions.
+    if is_task:
+        category = "task"
+    elif is_high:
+        category = "alert"
+    else:
+        category = "activity"
+
     return {
         "source_tool": source_tool,
         "title": title,
@@ -187,7 +198,7 @@ def _build_activity_notification_payload(
         "priority": priority,
         "metadata": {
             "from_chat": True,
-            "category": "task" if is_task else "alert",
+            "category": category,
             "action_required": is_task,
             "attention_title": title,
             "extracted_priority": priority,

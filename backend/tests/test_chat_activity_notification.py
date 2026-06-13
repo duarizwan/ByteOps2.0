@@ -30,6 +30,19 @@ def test_activity_notification_payload_classifies_action_items_as_tasks():
     assert payload["priority"] == "high"
 
 
+def test_routine_response_is_activity_not_alert():
+    """Routine tool activity must NOT default to 'alert' (keeps the alerts feed clean)."""
+    payload = _build_activity_notification_payload(
+        source_tool="gmail",
+        user_message="show my latest emails",
+        response_text="Here are your 5 most recent emails from this morning.",
+    )
+
+    assert payload["metadata"]["category"] == "activity"
+    assert payload["metadata"]["action_required"] is False
+    assert payload["priority"] == "medium"
+
+
 def test_activity_notification_payload_removes_markdown_markers():
     payload = _build_activity_notification_payload(
         source_tool="gmail",
