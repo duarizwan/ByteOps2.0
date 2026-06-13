@@ -1,4 +1,4 @@
-from app.anomaly.features import infer_tool, action_category
+from app.anomaly.features import infer_tool, action_category, PAD, UNK
 from app.anomaly.features import extract_step_features, NUMERIC_FEATURES
 
 
@@ -44,3 +44,19 @@ def test_extract_step_features_categoricals_and_numerics():
 def test_cross_tool_flag():
     steps = _run()  # gmail-only here -> not cross-tool
     assert extract_step_features(steps, idx=1)["is_cross_tool_action"] == 0
+
+
+from app.anomaly.features import build_feature_vocabs, encode_run, CATEGORICAL_FIELDS
+
+
+def test_build_vocabs_and_encode_shapes():
+    runs = [_run(), _run()]
+    vocabs = build_feature_vocabs(runs)
+    for field in CATEGORICAL_FIELDS:
+        assert vocabs[field][PAD] == 0 and vocabs[field][UNK] == 1
+    enc = encode_run(_run(), vocabs, max_len=6)
+    for field in CATEGORICAL_FIELDS:
+        assert len(enc["cat"][field]) == 6
+    assert len(enc["num"]) == 6
+    assert len(enc["num"][0]) == len(NUMERIC_FEATURES)
+    assert enc["mask"] == [1, 1, 1, 1, 0, 0]

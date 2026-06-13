@@ -103,3 +103,38 @@ def extract_step_features(steps: list[dict], idx: int) -> dict:
         "position_frac": idx / (n - 1) if n > 1 else 0.0,
         "run_length_norm": min(n, 20) / 20.0,
     }
+
+
+CATEGORICAL_FIELDS = ["step_type", "tool_name", "action_category"]
+
+
+def build_feature_vocabs(runs: list[list[dict]]) -> dict[str, dict[str, int]]:
+    """One id-map per categorical field, built from training runs. PAD=0, UNK=1."""
+    vocabs = {f: {PAD: 0, UNK: 1} for f in CATEGORICAL_FIELDS}
+    for steps in runs:
+        for idx in range(len(steps)):
+            feats = extract_step_features(steps, idx)
+            for f in CATEGORICAL_FIELDS:
+                v = vocabs[f]
+                if feats[f] not in v:
+                    v[feats[f]] = len(v)
+    return vocabs
+
+
+def encode_run(steps: list[dict], vocabs: dict, max_len: int) -> dict:
+    """Encode a run to fixed-length arrays: per-field categorical ids, a numeric
+    matrix, and a padding mask."""
+    cat = {f: [] for f in CATEGORICAL_FIELDS}
+    num = []
+    for idx in range(min(len(steps), max_len)):
+        feats = extract_step_features(steps, idx)
+        for f in CATEGORICAL_FIELDS:
+            cat[f].append(vocabs[f].get(feats[f], vocabs[f][UNK]))
+        num.append([float(feats[name]) for name in NUMERIC_FEATURES])
+    real = len(num)
+    pad_rows = max_len - real
+    for f in CATEGORICAL_FIELDS:
+        cat[f] += [0] * pad_rows
+    num += [[0.0] * len(NUMERIC_FEATURES) for _ in range(pad_rows)]
+    mask = [1] * real + [0] * pad_rows
+    return {"cat": cat, "num": num, "mask": mask, "length": real}
