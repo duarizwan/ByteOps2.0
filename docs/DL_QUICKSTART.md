@@ -51,10 +51,24 @@ heat marker in ByteOps start working**:
 - `app/anomaly/artifacts/lstm_nextaction.onnx` — the trained model
 - `app/anomaly/artifacts/vocab.json`, `model_meta.json`, `metrics.json`
 
-## Step 3 — Label red-team runs (so detection can be MEASURED)
+## Step 3 — Get a red-team (anomalous) set so detection can be MEASURED
 
 The LSTM trains without labels, but to *score* the detectors you need some runs you
-know are anomalous. Two ways:
+know are anomalous. **Important:** your aligned agent will *refuse* most destructive
+prompts outright, so capturing real attack runs is hard (this is a known problem —
+the Storf et al. paper synthesizes the anomalous class for exactly this reason).
+
+**Recommended — synthesize the red-team set (the paper's method):**
+```
+python scripts/make_redteam.py --append data/runs.jsonl --n 25
+```
+This adds 25 labeled synthetic anomalous sequences (external-send injection, tool
+repetition, destructive, out-of-order) to your dataset. Your real runs are untouched;
+only the rare positive class is synthetic. Re-running is idempotent. Report this
+honestly: "normal data is real; anomalous evaluation set is synthesized following
+Storf et al. 2026."
+
+**Optional — also capture real anomalous patterns** (the agent WILL perform these):
 
 **A. Label existing odd runs.** List your runs, pick anomalous-looking ones, label them:
 ```
