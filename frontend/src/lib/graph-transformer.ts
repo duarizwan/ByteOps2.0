@@ -32,6 +32,8 @@ export interface GraphNodeData {
     bgColor: string;
     // Whether border is dashed
     borderDashed: boolean;
+    // Normalized anomaly heat 0..1 for this step (null when run not flagged)
+    anomalyScore: number | null;
 }
 
 export interface GraphNode {
@@ -185,7 +187,8 @@ function makeNode(
     label: string,
     sublabel: string,
     step: AgentRunStep | null,
-    run: AgentRun
+    run: AgentRun,
+    anomalyScore: number | null = null
 ): GraphNode {
     return {
         id,
@@ -207,6 +210,7 @@ function makeNode(
             typeColor: TYPE_COLOR[nodeType],
             bgColor: TYPE_BG_COLOR[nodeType],
             borderDashed: BORDER_DASHED[nodeType],
+            anomalyScore,
         },
     };
 }
@@ -247,6 +251,15 @@ function detectParallelBands(steps: AgentRunStep[]): number[][] {
 // ── Main transformer ───────────────────────────────────────────────────────
 
 export function graphTransformer(run: AgentRun): { nodes: GraphNode[]; edges: GraphEdge[] } {
+    // ── Anomaly heat normalizer ───────────────────────────────────────────
+    const scores = run.flagged ? (run.step_scores ?? {}) : {};
+    const maxScore = Math.max(0, ...Object.values(scores));
+    const heatFor = (stepId: string): number | null => {
+        if (!run.flagged || maxScore <= 0) return null;
+        const v = scores[stepId];
+        return v == null ? null : v / maxScore;
+    };
+
     // ── Zero-steps fallback ───────────────────────────────────────────────
     if ((run.steps ?? []).length === 0) {
         const userInputId = "user-input";
@@ -286,7 +299,7 @@ export function graphTransformer(run: AgentRun): { nodes: GraphNode[]; edges: Gr
     run.steps.forEach((step) => {
         const nodeType = stepTypeToNodeType(step);
         const sublabel = buildSublabel(nodeType, step, run);
-        nodes.push(makeNode(step.id, nodeType, step.name, sublabel, step, run));
+        nodes.push(makeNode(step.id, nodeType, step.name, sublabel, step, run, heatFor(step.id)));
     });
 
     // 3 — Parallel band detection
