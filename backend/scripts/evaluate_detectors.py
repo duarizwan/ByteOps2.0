@@ -245,6 +245,7 @@ def main() -> None:
     print(f"\nSaved {OUTPUTS / 'comparison.md'}")
 
     # MLflow
+    mlflow.set_tracking_uri("sqlite:///mlflow.db")
     mlflow.set_experiment("byteops-anomaly-eval")
     with mlflow.start_run():
         mlflow.log_params({"n_train": len(train), "n_val_normal": len(val_normal),

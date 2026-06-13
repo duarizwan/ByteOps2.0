@@ -89,7 +89,7 @@ writes `outputs/comparison.md`:
 ## Step 5 — Open the MLflow dashboard
 
 ```
-.venv/Scripts/python.exe -m mlflow ui
+.venv/Scripts/python.exe -m mlflow ui --backend-store-uri sqlite:///mlflow.db
 ```
 Open http://localhost:5000 — shows every training/eval run with params, metrics, and
 artifacts. This is strong "I ran real experiments" evidence for the report.

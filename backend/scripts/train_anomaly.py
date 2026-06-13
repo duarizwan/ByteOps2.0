@@ -45,6 +45,7 @@ def main() -> None:
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
+    mlflow.set_tracking_uri("sqlite:///mlflow.db")
     mlflow.set_experiment("byteops-anomaly")
 
     seqs = load_sequences(Path(args.data))

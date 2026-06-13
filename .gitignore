@@ -28,3 +28,7 @@ backend/data/
 
 # Nested standalone project (its own git repo)
 agentsop/
+
+# MLflow sqlite backend
+backend/mlflow.db
+mlflow.db
