@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.database import engine
-from app.api import agent_runs, oauth, tools, users, chat, notifications, sync, workflows
+from app.api import agent_runs, oauth, tools, users, chat, notifications, sync, workflows, demo
 from app.services.sync.scheduler import start_scheduler, stop_scheduler
 
 
@@ -71,6 +71,7 @@ def create_app() -> FastAPI:
     app.include_router(agent_runs.router)
     app.include_router(workflows.router)
     app.include_router(sync.router)
+    app.include_router(demo.router)
 
     @app.get("/health")
     async def health_check():
