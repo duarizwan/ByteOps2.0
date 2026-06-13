@@ -67,13 +67,19 @@ export const EllipseNode = memo(function EllipseNode({ data, selected }: NodePro
                 {heatLevel && (
                     <span
                         data-anomaly={heatLevel}
-                        title={`Anomaly score: ${(heat as number).toFixed(2)}`}
+                        role="img"
+                        aria-label={`Anomaly: ${heatLevel} (score ${(heat as number).toFixed(2)})`}
+                        title={`Anomaly: ${heatLevel} — score ${(heat as number).toFixed(2)}`}
                         style={{
-                            position: "absolute", top: -6, right: -6, width: 12, height: 12,
-                            borderRadius: "50%", background: heatColor,
+                            position: "absolute", top: -7, right: -7, minWidth: 14, height: 14,
+                            padding: "0 3px", borderRadius: 7, background: heatColor,
+                            color: "#1a1a1a", fontSize: 9, fontWeight: 700, lineHeight: "14px",
+                            textAlign: "center",
                             boxShadow: `0 0 8px ${heatColor}`, border: "1.5px solid var(--card)",
                         }}
-                    />
+                    >
+                        {heatLevel === "high" ? "!" : ""}
+                    </span>
                 )}
                 {d.borderDashed && (
                     <svg
