@@ -51,3 +51,55 @@ def action_category(action: str) -> str:
     if any(k in a for k in _WRITE):
         return "write"
     return "read"
+
+
+# Ordered list of numeric/binary features (model feeds these as a block)
+NUMERIC_FEATURES = [
+    "risk_level",            # ordinal 0..4
+    "status_ok",             # 1 if completed/approved
+    "approval_required",     # 1 if write/send/destructive
+    "approval_rejected",     # 1 if this step is a rejected approval
+    "is_external_domain",    # 1 if external/forward action
+    "is_sensitive_data_action",
+    "is_cross_tool_action",  # run touches >1 distinct tool
+    "position_frac",         # idx / (run_length-1)
+    "run_length_norm",       # min(run_length,20)/20
+]
+
+_RISK_ORDINAL = {"none": 0, "read": 1, "write": 2, "external_send": 3, "destructive": 4}
+
+
+def _risk_level(step: dict) -> int:
+    if step.get("step_type") == "tool_call":
+        risk = classify_tool_call("", str(step.get("name", ""))).risk.value
+    else:
+        risk = "none"
+    return _RISK_ORDINAL.get(risk, 0)
+
+
+def extract_step_features(steps: list[dict], idx: int) -> dict:
+    """Return categorical + numeric features for step `idx` within its run."""
+    step = steps[idx]
+    name = str(step.get("name", ""))
+    step_type = str(step.get("step_type", "")).strip() or "unknown"
+    status = str(step.get("status", "")).strip().lower()
+    cat = action_category(name) if step_type == "tool_call" else "none"
+    tools = {infer_tool(str(s.get("name", ""))) for s in steps if s.get("step_type") == "tool_call"}
+    tools.discard("none")
+    n = max(1, len(steps))
+    return {
+        # categoricals (embedded)
+        "step_type": step_type,
+        "tool_name": infer_tool(name) if step_type == "tool_call" else "none",
+        "action_category": cat,
+        # numerics (NUMERIC_FEATURES order)
+        "risk_level": _risk_level(step),
+        "status_ok": 1 if status in ("completed", "approved") else 0,
+        "approval_required": 1 if cat in ("write", "send", "external", "destructive") else 0,
+        "approval_rejected": 1 if (step_type == "approval" and status == "rejected") or name.startswith("reject:") else 0,
+        "is_external_domain": 1 if cat == "external" else 0,
+        "is_sensitive_data_action": 1 if any(k in name.lower() for k in _SENSITIVE) else 0,
+        "is_cross_tool_action": 1 if len(tools) > 1 else 0,
+        "position_frac": idx / (n - 1) if n > 1 else 0.0,
+        "run_length_norm": min(n, 20) / 20.0,
+    }
