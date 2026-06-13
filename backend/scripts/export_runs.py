@@ -19,10 +19,19 @@ from app.anomaly.tokenizer import run_to_tokens  # noqa: E402
 
 
 def run_record_to_sequence(record: dict) -> dict:
+    steps = record.get("steps", [])
+    meta = record.get("metadata") or {}
+    label = record.get("data_label", "unlabeled")
     return {
         "run_id": record["id"],
-        "label": record.get("data_label", "unlabeled"),
-        "tokens": run_to_tokens(record.get("steps", [])),
+        "label": label,
+        "anomaly_type": meta.get("anomaly_type", "unknown" if label == "redteam" else "none"),
+        "intent": record.get("intent", "general"),
+        "tokens": run_to_tokens(steps),  # v1, backward compatible
+        "steps": [
+            {"step_type": s.get("step_type"), "name": s.get("name"), "status": s.get("status")}
+            for s in steps
+        ],
     }
 
 
