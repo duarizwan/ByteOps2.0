@@ -175,12 +175,53 @@ async def complete_agent_run(db: AsyncSession, run: AgentRun, final_response: st
             for s in run.steps
         ]
         apply_anomaly_scoring(run, steps)
-        await apply_llm_monitoring(run, steps)
         await db.commit()
         await db.refresh(run)
     except Exception:  # noqa: BLE001 - scoring is best-effort
         await db.rollback()
     return run
+
+
+_bg_tasks: set = set()
+
+
+async def score_run_llm_background(run_id) -> None:
+    """Run the LLM monitor for a completed run in its OWN session, off the
+    request's critical path. Best-effort — never raises."""
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    from app.core.database import async_session_factory
+
+    try:
+        async with async_session_factory() as db:
+            result = await db.execute(
+                select(AgentRun).options(selectinload(AgentRun.steps)).where(AgentRun.id == run_id)
+            )
+            run = result.scalar_one_or_none()
+            if run is None:
+                return
+            steps = [
+                {"id": str(s.id),
+                 "step_type": s.step_type.value if hasattr(s.step_type, "value") else str(s.step_type),
+                 "name": s.name, "status": s.status}
+                for s in run.steps
+            ]
+            await apply_llm_monitoring(run, steps)
+            await db.commit()
+    except Exception:  # noqa: BLE001 - background scoring must never surface
+        return
+
+
+def schedule_llm_monitoring(run_id) -> None:
+    """Fire-and-forget LLM monitoring so it never blocks the chat 'done' event."""
+    try:
+        task = asyncio.create_task(score_run_llm_background(run_id))
+        _bg_tasks.add(task)
+        task.add_done_callback(_bg_tasks.discard)
+    except RuntimeError:
+        # No running loop (e.g. in a sync test context) — skip silently.
+        pass
 
 
 async def fail_agent_run(db: AsyncSession, run: AgentRun, error: str) -> AgentRun:

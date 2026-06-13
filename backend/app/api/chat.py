@@ -46,6 +46,7 @@ from app.services.agent_runtime import (
     create_agent_run,
     fail_agent_run,
     record_agent_step,
+    schedule_llm_monitoring,
 )
 from app.services.workflow_creation import (
     build_workflow_draft,
@@ -443,6 +444,10 @@ async def _run_chat(
         await complete_agent_run(db, agent_run, full_text)
 
         await queue.put(("done", full_text, str(conv.id)))
+
+        # LLM monitoring runs AFTER 'done' (fire-and-forget, own DB session) so
+        # it never delays the user's response.
+        schedule_llm_monitoring(agent_run.id)
 
     except Exception as exc:  # noqa: BLE001
         msg = str(exc)

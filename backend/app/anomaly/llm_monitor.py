@@ -7,12 +7,16 @@ Best-effort: returns None on any failure; never raises into a run.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 
 from app.anomaly.constitution import CONSTITUTION_PROMPT
 
 logger = logging.getLogger(__name__)
+
+# Hard ceiling so a slow/hung provider can never stall scoring.
+_LLM_TIMEOUT_SECONDS = 20.0
 
 
 def parse_score(text: str) -> int:
@@ -39,10 +43,13 @@ async def score_run_llm(steps: list[dict]) -> dict | None:
 
         client = get_llm_client()
         trajectory = _serialize(steps)
-        resp = await client.create_message(
-            system=CONSTITUTION_PROMPT,
-            messages=[{"role": "user", "content": f"Agent run trajectory:\n{trajectory}"}],
-            max_tokens=1024,
+        resp = await asyncio.wait_for(
+            client.create_message(
+                system=CONSTITUTION_PROMPT,
+                messages=[{"role": "user", "content": f"Agent run trajectory:\n{trajectory}"}],
+                max_tokens=1024,
+            ),
+            timeout=_LLM_TIMEOUT_SECONDS,
         )
         text = "".join(
             b.text for b in resp.content if getattr(b, "type", "") == "text"
