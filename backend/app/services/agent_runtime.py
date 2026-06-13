@@ -9,8 +9,36 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent_run import AgentRun, AgentRunStatus, AgentRunStep, AgentRunStepType
 from app.anomaly.scorer import AnomalyScorer
+from app.anomaly.llm_monitor import score_run_llm
+from app.services.agent_policy import classify_tool_call
 
 _scorer = AnomalyScorer()
+
+_RISKY_RISKS = {"write", "external_send", "destructive"}
+
+
+def has_risky_step(steps: list[dict]) -> bool:
+    for s in steps:
+        if s.get("step_type") == "tool_call":
+            if classify_tool_call("", str(s.get("name", ""))).risk.value in _RISKY_RISKS:
+                return True
+    return False
+
+
+async def apply_llm_monitoring(run, steps: list[dict]) -> None:
+    """Best-effort LLM monitor. Only runs for risky runs. Never raises."""
+    try:
+        if not has_risky_step(steps):
+            return
+        result = await score_run_llm(steps)
+        if not result:
+            return
+        run.llm_score = result["score"]
+        run.llm_reasoning = result["reasoning"]
+        if result["flagged"]:
+            run.flagged = True
+    except Exception:  # noqa: BLE001 - never break a run
+        return
 
 
 def apply_anomaly_scoring(run, steps: list[dict]) -> None:
@@ -51,6 +79,8 @@ def serialize_agent_run(run: AgentRun) -> dict:
         "step_scores": getattr(run, "step_scores", None),
         "flagged": bool(getattr(run, "flagged", False)),
         "data_label": getattr(run, "data_label", "unlabeled"),
+        "llm_score": getattr(run, "llm_score", None),
+        "llm_reasoning": getattr(run, "llm_reasoning", None),
         "created_at": _iso(run.created_at),
         "updated_at": _iso(run.updated_at),
         "completed_at": _iso(run.completed_at),
@@ -145,6 +175,7 @@ async def complete_agent_run(db: AsyncSession, run: AgentRun, final_response: st
             for s in run.steps
         ]
         apply_anomaly_scoring(run, steps)
+        await apply_llm_monitoring(run, steps)
         await db.commit()
         await db.refresh(run)
     except Exception:  # noqa: BLE001 - scoring is best-effort
