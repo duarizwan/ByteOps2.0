@@ -36,7 +36,8 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.anomaly.tokenizer import PAD, build_vocab, encode_tokens  # noqa: E402
+from app.anomaly.tokenizer import PAD, build_vocab, encode_tokens, run_to_tokens  # noqa: E402
+from app.anomaly import metrics as M  # noqa: E402
 
 OUTPUTS = Path(__file__).resolve().parent.parent / "outputs"
 
@@ -96,8 +97,11 @@ def lstm_scores(train, eval_items, vocab, max_len, epochs, hidden, embed, seed):
     torch.manual_seed(seed)
     vocab_size = len(vocab)
 
+    def _toks(s):
+        return s.get("tokens") or run_to_tokens(s.get("steps", []))
+
     def enc(items):
-        return torch.tensor([encode_tokens(s["tokens"], vocab, max_len) for s in items], dtype=torch.long)
+        return torch.tensor([encode_tokens(_toks(s), vocab, max_len) for s in items], dtype=torch.long)
 
     class NextActionLSTM(nn.Module):
         def __init__(self):
@@ -144,7 +148,7 @@ def iso_scores(train, eval_items, seed):
     def feats(items):
         rows = []
         for s in items:
-            toks = s["tokens"]; n = len(toks) or 1
+            toks = s.get("tokens") or run_to_tokens(s.get("steps", [])); n = len(toks) or 1
             ext = sum(1 for t in toks if "external_send" in t or "destructive" in t)
             rows.append([n, ext / n, len(set(toks)) / n])
         return np.array(rows) if items else np.zeros((0, 3))
@@ -163,7 +167,7 @@ async def llm_scores(eval_items):
     for s in eval_items:
         # Reconstruct a readable trajectory from tokens for the action-only monitor.
         steps = []
-        for tok in s["tokens"]:
+        for tok in (s.get("tokens") or run_to_tokens(s.get("steps", []))):
             parts = tok.split("|")
             step_type = parts[0] if parts else "step"
             name = parts[1] if len(parts) > 1 else tok
@@ -172,6 +176,46 @@ async def llm_scores(eval_items):
         res = await score_run_llm(steps)
         out.append(float(res["score"]) if res else 5.0)
     return np.array(out)
+
+
+def supervised_scores(model_name, train, test, max_len=20, epochs=40, seed=42):
+    """Train BiLSTM+Attention or Transformer on `train`, return anomaly scores for `test`."""
+    import torch, torch.nn as nn
+    from app.anomaly.features import build_feature_vocabs, encode_run, CATEGORICAL_FIELDS, NUMERIC_FEATURES
+    from app.anomaly.models import BiLSTMAttention, TransformerEncoderClassifier
+    torch.manual_seed(seed)
+    vocabs = build_feature_vocabs([r["steps"] for r in train])
+    vsz = {f: len(vocabs[f]) for f in CATEGORICAL_FIELDS}
+
+    def batch(items):
+        enc = [encode_run(r["steps"], vocabs, max_len) for r in items]
+        cat = {f: torch.tensor([e["cat"][f] for e in enc]) for f in CATEGORICAL_FIELDS}
+        num = torch.tensor([e["num"] for e in enc], dtype=torch.float32)
+        mask = torch.tensor([e["mask"] for e in enc], dtype=torch.float32)
+        y = torch.tensor([1.0 if r["label"] == "redteam" else 0.0 for r in items])
+        return cat, num, mask, y
+
+    Model = BiLSTMAttention if model_name == "bilstm_attn" else TransformerEncoderClassifier
+    model = Model(vsz, len(NUMERIC_FEATURES))
+    opt = torch.optim.Adam(model.parameters(), lr=1e-3)
+    cat_tr, num_tr, mask_tr, y_tr = batch(train)
+    n_pos = max(1.0, float((y_tr == 1).sum())); n_neg = max(1.0, float((y_tr == 0).sum()))
+    loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(n_neg / n_pos))
+    model.train()
+    for _ in range(epochs):
+        perm = torch.randperm(y_tr.shape[0])
+        for i in range(0, y_tr.shape[0], 32):
+            bi = perm[i:i+32]
+            cb = {f: cat_tr[f][bi] for f in CATEGORICAL_FIELDS}
+            opt.zero_grad()
+            logit, _ = model(cb, num_tr[bi], mask_tr[bi])
+            loss_fn(logit, y_tr[bi]).backward()
+            opt.step()
+    model.eval()
+    cat_te, num_te, mask_te, _ = batch(test)
+    with torch.no_grad():
+        logit, _ = model(cat_te, num_te, mask_te)
+        return torch.sigmoid(logit).numpy()
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
@@ -201,41 +245,62 @@ def main() -> None:
         print(f"WARNING: only {len(normal)} normal runs — metrics will be very noisy.")
 
     rng = np.random.default_rng(args.seed)
+    # Split BOTH classes 70/30 so the test set is identical for every detector and
+    # the supervised models still see redteam examples during training.
     idx = rng.permutation(len(normal))
     cut = max(1, int(0.7 * len(normal)))
-    train = [normal[i] for i in idx[:cut]]
+    train = [normal[i] for i in idx[:cut]]               # normal-train (unsupervised fit)
     val_normal = [normal[i] for i in idx[cut:]] or [normal[idx[0]]]
 
-    # Eval set: held-out normal (label 0) + redteam (label 1)
-    eval_items = val_normal + redteam
-    labels = np.array([0] * len(val_normal) + [1] * len(redteam))
+    ridx = rng.permutation(len(redteam))
+    rcut = max(1, int(0.7 * len(redteam))) if len(redteam) > 1 else 0
+    redteam_train = [redteam[i] for i in ridx[:rcut]]    # redteam-train (supervised only)
+    redteam_test = [redteam[i] for i in ridx[rcut:]] or list(redteam)
 
-    vocab = build_vocab([s["tokens"] for s in train])
+    # Eval set: held-out normal (label 0) + held-out redteam (label 1) — same for all.
+    eval_items = val_normal + redteam_test
+    labels = np.array([0] * len(val_normal) + [1] * len(redteam_test))
+
+    # Supervised models need BOTH classes in training: normal-train + redteam-train.
+    sup_train = train + redteam_train
+
+    vocab = build_vocab([s.get("tokens") or run_to_tokens(s.get("steps", [])) for s in train])
 
     detectors: dict[str, np.ndarray] = {}
     detectors["LSTM (next-action)"] = lstm_scores(
         train, eval_items, vocab, args.max_len, args.epochs, args.hidden, args.embed, args.seed
     )
     detectors["Isolation Forest"] = iso_scores(train, eval_items, args.seed)
+    detectors["BiLSTM+Attention"] = supervised_scores("bilstm_attn", sup_train, eval_items, seed=args.seed)
+    detectors["Transformer"] = supervised_scores("transformer", sup_train, eval_items, seed=args.seed)
     if not args.no_llm:
         detectors["LLM monitor"] = asyncio.run(llm_scores(eval_items))
 
-    # Compute metrics
+    # Compute full metric set for every detector (accuracy/precision/recall/F1/AUROC/pAUROC).
     rows = []
     for name, scores in detectors.items():
-        pa = partial_auroc(labels, scores)
-        f1, prec, rec, thr = best_f1(labels, scores)
-        rows.append((name, pa, f1, prec, rec))
+        scores = np.asarray(scores, dtype=float)
+        pa = M.partial_auroc(labels, scores)
+        au = M.auroc(labels, scores)
+        # Use the F1-maximizing threshold for the point metrics, consistent across detectors.
+        _f1, _pr, _rc, thr = best_f1(labels, scores)
+        cm = M.classification_metrics(labels, scores, thr)
+        rows.append((name, cm["accuracy"], cm["precision"], cm["recall"], cm["f1"], au, pa))
 
     # Markdown table
-    header = "| Detector | pAUROC@FPR<0.2 | F1 | Precision | Recall |\n|---|---|---|---|---|"
+    header = ("| Detector | Accuracy | Precision | Recall | F1 | AUROC | pAUROC@FPR<0.2 |\n"
+              "|---|---|---|---|---|---|---|")
     body = "\n".join(
-        f"| {n} | {pa:.3f} | {f1:.3f} | {pr:.3f} | {rc:.3f} |" for (n, pa, f1, pr, rc) in rows
+        f"| {n} | {acc:.3f} | {pr:.3f} | {rc:.3f} | {f1:.3f} | {au:.3f} | {pa:.3f} |"
+        for (n, acc, pr, rc, f1, au, pa) in rows
     )
     table = (
         f"# Anomaly Detector Comparison\n\n"
-        f"Eval set: {len(val_normal)} held-out normal runs + {len(redteam)} red-team runs "
-        f"(train: {len(train)} normal). Metric: partial AUROC at FPR<0.2 (Storf et al. 2026) + best-F1.\n\n"
+        f"Eval set: {len(val_normal)} held-out normal runs + {len(redteam_test)} red-team runs "
+        f"(unsupervised train: {len(train)} normal; supervised train: {len(train)} normal + "
+        f"{len(redteam_train)} red-team). "
+        f"Metrics: accuracy/precision/recall/F1 at the F1-optimal threshold, AUROC, and "
+        f"partial AUROC at FPR<0.2 (Storf et al. 2026).\n\n"
         f"{header}\n{body}\n"
     )
     print("\n" + table)
@@ -249,10 +314,12 @@ def main() -> None:
     mlflow.set_experiment("byteops-anomaly-eval")
     with mlflow.start_run():
         mlflow.log_params({"n_train": len(train), "n_val_normal": len(val_normal),
-                           "n_redteam": len(redteam), "max_len": args.max_len, "epochs": args.epochs})
-        for (n, pa, f1, pr, rc) in rows:
-            key = n.split(" ")[0].lower()
-            for metric, val in [("pauroc", pa), ("f1", f1), ("precision", pr), ("recall", rc)]:
+                           "n_redteam_train": len(redteam_train), "n_redteam_test": len(redteam_test),
+                           "max_len": args.max_len, "epochs": args.epochs})
+        for (n, acc, pr, rc, f1, au, pa) in rows:
+            key = n.split(" ")[0].lower().replace("+", "_")
+            for metric, val in [("accuracy", acc), ("precision", pr), ("recall", rc),
+                                ("f1", f1), ("auroc", au), ("pauroc", pa)]:
                 if not np.isnan(val):
                     mlflow.log_metric(f"{key}_{metric}", float(val))
         mlflow.log_artifact(str(OUTPUTS / "comparison.md"))
