@@ -47,14 +47,37 @@ async def _set_label(ids: list[str], label: str) -> None:
         print(f"Set data_label='{label}' on {res.rowcount} run(s).")
 
 
+async def _auto_label_rejected() -> None:
+    """Auto-label every run that contains a rejected risky action (a real
+    red-team attempt you blocked at the approval gate) as 'redteam'."""
+    from sqlalchemy import text
+    async with async_session_factory() as s:
+        ids = [row[0] for row in (await s.execute(text(
+            "SELECT DISTINCT st.run_id FROM agent_run_steps st "
+            "WHERE st.name LIKE 'reject:%' OR st.status = 'rejected'"
+        ))).all()]
+        if not ids:
+            print("No rejected-attempt runs found. (Reject a risky action at the approval gate first.)")
+            return
+        res = await s.execute(
+            update(AgentRun).where(AgentRun.id.in_(ids)).values(data_label="redteam")
+        )
+        await s.commit()
+        print(f"Auto-labeled {res.rowcount} rejected-attempt run(s) as redteam.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("ids", nargs="*", help="run IDs to label as redteam")
     parser.add_argument("--list", action="store_true", help="list recent runs")
+    parser.add_argument("--auto-rejected", action="store_true",
+                        help="auto-label all runs with a rejected risky action as redteam")
     parser.add_argument("--unlabel", action="store_true", help="revert given IDs to 'unlabeled'")
     args = parser.parse_args()
 
-    if args.list:
+    if args.auto_rejected:
+        asyncio.run(_auto_label_rejected())
+    elif args.list:
         asyncio.run(_list())
     elif args.ids:
         asyncio.run(_set_label(args.ids, "unlabeled" if args.unlabel else "redteam"))
