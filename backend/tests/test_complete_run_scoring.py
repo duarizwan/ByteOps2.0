@@ -10,7 +10,18 @@ class _FakeScorer:
         return {"anomaly_score": 1.23, "step_scores": {"x": 1.23}, "flagged": True}
 
 
+class _OffAttention:
+    """Attention scorer disabled, so the LSTM fallback path is exercised even
+    when a real attention model is present in app/anomaly/artifacts/."""
+
+    available = False
+
+    def score_run(self, steps):  # pragma: no cover - never called when unavailable
+        return None
+
+
 def test_apply_scoring_sets_fields(monkeypatch):
+    monkeypatch.setattr(rt, "_attn_scorer", _OffAttention())
     monkeypatch.setattr(rt, "_scorer", _FakeScorer())
 
     class Run:
@@ -33,6 +44,7 @@ def test_apply_scoring_swallows_errors(monkeypatch):
         def score_run(self, steps):
             raise RuntimeError("model exploded")
 
+    monkeypatch.setattr(rt, "_attn_scorer", _OffAttention())
     monkeypatch.setattr(rt, "_scorer", Boom())
 
     class Run:

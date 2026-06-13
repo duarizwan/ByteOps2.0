@@ -9,19 +9,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent_run import AgentRun, AgentRunStatus, AgentRunStep, AgentRunStepType
 from app.anomaly.scorer import AnomalyScorer
+from app.anomaly.attention_scorer import AttentionScorer
 from app.anomaly.llm_monitor import score_run_llm
 from app.services.agent_policy import classify_tool_call
 
 _scorer = AnomalyScorer()
+_attn_scorer = AttentionScorer()
 
 _RISKY_RISKS = {"write", "external_send", "destructive"}
 
 
 def has_risky_step(steps: list[dict]) -> bool:
     for s in steps:
+        # A risky tool actually ran...
         if s.get("step_type") == "tool_call":
             if classify_tool_call("", str(s.get("name", ""))).risk.value in _RISKY_RISKS:
                 return True
+        # ...or a risky action hit the approval gate (approved OR rejected) — reaching
+        # the gate at all means the agent attempted something sensitive, which is
+        # exactly what the monitor should review and explain.
+        if s.get("step_type") == "approval":
+            return True
+        if str(s.get("status", "")).lower() == "rejected":
+            return True
     return False
 
 
@@ -42,16 +52,23 @@ async def apply_llm_monitoring(run, steps: list[dict]) -> None:
 
 
 def apply_anomaly_scoring(run, steps: list[dict]) -> None:
-    """Best-effort: write anomaly fields onto `run`. Never raises."""
+    """Best-effort: write anomaly fields onto `run`. Prefer the supervised
+    attention model (better per-step localization); fall back to the LSTM NLL
+    scorer. Never raises."""
     try:
-        if not _scorer.available:
-            return
-        result = _scorer.score_run(steps)
+        result = None
+        if _attn_scorer.available:
+            result = _attn_scorer.score_run(steps)
+        if result is None and _scorer.available:
+            result = _scorer.score_run(steps)
         if not result:
             return
         run.anomaly_score = result["anomaly_score"]
         run.step_scores = result["step_scores"]
         run.flagged = result["flagged"]
+        # the attention scorer also returns a human-readable reason
+        if result.get("reasoning") and hasattr(run, "llm_reasoning") and not getattr(run, "llm_reasoning", None):
+            run.llm_reasoning = result["reasoning"]
     except Exception:  # noqa: BLE001 - scoring must never break a run
         return
 
