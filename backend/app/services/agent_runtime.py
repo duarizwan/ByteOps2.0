@@ -8,6 +8,24 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent_run import AgentRun, AgentRunStatus, AgentRunStep, AgentRunStepType
+from app.anomaly.scorer import AnomalyScorer
+
+_scorer = AnomalyScorer()
+
+
+def apply_anomaly_scoring(run, steps: list[dict]) -> None:
+    """Best-effort: write anomaly fields onto `run`. Never raises."""
+    try:
+        if not _scorer.available:
+            return
+        result = _scorer.score_run(steps)
+        if not result:
+            return
+        run.anomaly_score = result["anomaly_score"]
+        run.step_scores = result["step_scores"]
+        run.flagged = result["flagged"]
+    except Exception:  # noqa: BLE001 - scoring must never break a run
+        return
 
 
 def _iso(value: datetime | None) -> str | None:
@@ -118,6 +136,19 @@ async def complete_agent_run(db: AsyncSession, run: AgentRun, final_response: st
     run.completed_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(run)
+    try:
+        await db.refresh(run, ["steps"])
+        steps = [
+            {"id": str(s.id),
+             "step_type": s.step_type.value if hasattr(s.step_type, "value") else str(s.step_type),
+             "name": s.name, "status": s.status}
+            for s in run.steps
+        ]
+        apply_anomaly_scoring(run, steps)
+        await db.commit()
+        await db.refresh(run)
+    except Exception:  # noqa: BLE001 - scoring is best-effort
+        await db.rollback()
     return run
 
 
