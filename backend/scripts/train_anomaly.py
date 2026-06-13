@@ -151,7 +151,8 @@ def main() -> None:
     dummy = torch.zeros(1, max_len, dtype=torch.long)
     torch.onnx.export(
         model, dummy, str(ARTIFACTS / "lstm_nextaction.onnx"),
-        input_names=["tokens"], output_names=["logits"], dynamic_axes=None, opset_version=13,
+        input_names=["tokens"], output_names=["logits"], dynamic_axes=None,
+        opset_version=13, dynamo=False,
     )
     (ARTIFACTS / "vocab.json").write_text(json.dumps(vocab), encoding="utf-8")
     (ARTIFACTS / "model_meta.json").write_text(
