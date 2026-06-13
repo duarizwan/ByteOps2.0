@@ -96,6 +96,25 @@ Synthetic data of any kind, attention-based supervised classifier, transformer c
 
 ---
 
+# Addendum (2026-06-13): Non-technical-first UX principle (governing constraint)
+
+ByteOps's core purpose is to unify many platforms into one interface usable by **both technical and non-technical employees**. Therefore every feature in this spec — anomaly scores, agent cards, dependency graphs, audit trails — is governed by **role-based progressive disclosure**. This is a hard constraint, not a preference.
+
+**Three personas, three surfaces:**
+- **Non-technical employee (default):** sees only the chat box, a plain-language activity feed (✓ Done / ⏸ Needs your approval), and human-worded approval prompts. Never sees run graphs, suspicion scores, NLL, dependency graphs, or any ML/jargon. The anomaly detection reaches them ONLY as a plain-language safety prompt (e.g. "This would send a file to an outside address — approve or cancel?").
+- **Technical / power user:** the above plus the workflow builder and the `/runs` trace graph.
+- **Admin / governance:** the above plus Agent Cards, dependency/blast-radius graph, audit trail, and numeric suspicion scores. (Paper 2's Agent Card is explicitly a governance artifact, not an end-user one.)
+
+**Implementation rules:**
+1. All technical/governance UI (suspicion numbers, graphs, cards) lives behind an explicit Advanced/Admin surface — never on the default chat view.
+2. Plain language only on the non-technical surface: "I checked your email," not "tool_call: search_emails".
+3. A role/view flag decides what renders; non-technical accounts do not render `/runs` internals.
+4. Templates and sensible defaults over blank canvas + settings.
+
+Every UI task below MUST state which persona surface it targets.
+
+---
+
 # Addendum (2026-06-13): LLM-monitor track + governance features
 
 Grounded in two papers the user supplied: **Storf et al., "Constitutional Black-Box Monitoring for Scheming in LLM Agents"** (Apollo Research/MATS, ICML 2026) — the intellectual parent of agentsop — and **Elsayed & Jones, "Agentic Explainability at Scale" (XAI at Scale)** (Credo AI, 2026). Decisions confirmed with the user.

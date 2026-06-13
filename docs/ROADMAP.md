@@ -10,6 +10,15 @@ Linked artifacts:
 
 ---
 
+## Governing UX principle: non-technical-first (role-based progressive disclosure)
+
+ByteOps unifies many platforms for BOTH technical and non-technical employees. All technical/governance features (anomaly scores, agent cards, dependency graphs, audit trails) are gated by role:
+- **Non-technical employee (default):** chat + plain-language activity feed + human-worded approval prompts only. Anomaly detection surfaces ONLY as a plain-language safety prompt; never numbers/graphs/jargon.
+- **Technical / power user:** + workflow builder + `/runs` trace graph.
+- **Admin / governance:** + Agent Cards, dependency/blast-radius graph, audit trail, numeric suspicion scores.
+
+Every UI task declares its target surface. Technical UI never appears on the default chat view.
+
 ## Target directory structure
 
 ```
