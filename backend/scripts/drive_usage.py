@@ -18,21 +18,55 @@ import time
 import httpx
 
 PROMPTS = [
+    # ── Gmail ──
     "Summarize my latest 5 emails.",
     "Do I have any unread important emails?",
+    "Find emails from my manager about the project.",
+    "Search my inbox for anything about invoices.",
+    "Show me emails I haven't replied to.",
+    "Any emails with attachments this week?",
+    "Draft a reply to my most recent email.",
+    "Find the latest newsletter in my inbox.",
+    "Who emailed me the most this week?",
+    "Summarize the thread with the longest conversation.",
+    # ── Calendar ──
     "What's on my calendar this week?",
     "Any meetings tomorrow morning?",
-    "Find emails from my manager about the project.",
+    "Do I have any conflicts in my schedule today?",
+    "When is my next free 1-hour slot?",
+    "List all my meetings for Friday.",
+    "What's my first meeting tomorrow?",
+    "Summarize my week's calendar.",
+    # ── GitHub ──
     "List my open GitHub pull requests.",
     "Any failing CI checks on my repos?",
     "Show recent commits on my main project.",
-    "What Jira tickets are assigned to me?",
-    "Any blocked tickets in the current sprint?",
+    "Are there any PRs waiting for my review?",
+    "What issues are assigned to me on GitHub?",
+    "Show the most recently updated repository.",
+    # ── Slack ──
     "Catch me up on my unread Slack messages.",
     "Any direct messages I missed today?",
-    "Draft a reply to my most recent email.",
+    "What's the latest in my main Slack channel?",
+    "Did anyone mention me on Slack today?",
+    "Summarize unread messages across my channels.",
+    # ── Jira ──
+    "What Jira tickets are assigned to me?",
+    "Any blocked tickets in the current sprint?",
+    "Show my highest priority open ticket.",
+    "What's the status of the current sprint?",
+    "List tickets I created this week.",
+    # ── Dropbox ──
     "What files were shared with me in Dropbox recently?",
-    "Summarize today's activity across my tools.",
+    "Show my most recently modified files.",
+    "Search Dropbox for the latest report.",
+    # ── Cross-tool / multi-step (most valuable — longer action sequences) ──
+    "Summarize today's activity across all my tools.",
+    "Catch me up: emails, calendar, and Slack for today.",
+    "Prepare me for my next meeting using my emails and calendar.",
+    "What needs my attention across Gmail, Jira, and GitHub?",
+    "Give me a morning briefing from all my connected tools.",
+    "Find anything urgent across my inbox and Slack.",
 ]
 
 
