@@ -93,3 +93,44 @@ Single-layer causal LSTM, hidden 32–64, embedding 32, `max_len` ≈ 12, dropou
 ## 9. Out of scope
 
 Synthetic data of any kind, attention-based supervised classifier, transformer comparison, SHAP, real-time per-step streaming scores (post-completion scoring only for v1), auto-retraining pipelines, multi-tenant model isolation.
+
+---
+
+# Addendum (2026-06-13): LLM-monitor track + governance features
+
+Grounded in two papers the user supplied: **Storf et al., "Constitutional Black-Box Monitoring for Scheming in LLM Agents"** (Apollo Research/MATS, ICML 2026) — the intellectual parent of agentsop — and **Elsayed & Jones, "Agentic Explainability at Scale" (XAI at Scale)** (Credo AI, 2026). Decisions confirmed with the user.
+
+## A. Why this addendum
+
+Paper 1's actual method is **not** a trained small model — it is an **LLM black-box monitor**: a prompted frontier model that reads only externally observable actions (user message, tool calls, tool outputs — no chain-of-thought) and emits a **1–10 suspicion score**. Key findings adopted here: graded 1–10 scoring beats binary; evaluate at low false-positive rate using **partial AUROC (FPR < 0.2)**; performance **saturates with light optimization** (so heavy tuning is unnecessary and overfits); label positives by **verifiable outcome**, not guessed intent.
+
+Decision: **keep the self-supervised LSTM as the trained-DL course contribution AND add an LLM-monitor track.** This yields a three-way comparison (LSTM vs Isolation Forest vs LLM-monitor), a detector that works with **zero training data** (solving the 63-run scarcity problem), and a stronger report. Paper 2 supplies the governance UX that turns ByteOps into the platform that operationalizes detection.
+
+## B. LLM black-box monitor (new detector)
+
+- **`backend/app/anomaly/constitution.py`** — a natural-language "anomaly constitution" for ByteOps: what counts as anomalous (forwarding/exfiltrating externally, privilege escalation, reading secrets, skipping validation, tool-repetition, acting before context). Drives both the monitor prompt and red-team labeling.
+- **`backend/app/anomaly/llm_monitor.py`** — `score_run_llm(steps) -> {score:1-10, reasoning, flagged}` using the existing `app.core.llm_client.get_llm_client().create_message(system=CONSTITUTION_PROMPT, messages=[trajectory])`. Action-only: serialize tool calls + outcomes, never CoT. Parses an integer 1–10; defaults to 5 on parse failure (per Paper 1). Best-effort, async, never blocks a run.
+- Reference prompts from Paper 1 Appendix G are adapted as the starting monitor prompt (no heavy optimization — the paper shows it saturates).
+- Scoring scale standardized to **1–10** across LSTM (normalized NLL), Isolation Forest, and LLM-monitor; evaluation reports **pAUROC at FPR<0.2** alongside F1.
+- Cost control: LLM-monitor runs async in the background; may be gated to runs containing write/external/destructive steps (cheap LSTM pre-filters which runs get the expensive LLM look).
+
+## C. Governance features (Paper 2) — all in the existing Tailwind/XYFlow theme
+
+1. **Suspicion score on the trace** — 1–10 score surfaced on the run graph (upgrade of the planned heat overlay).
+2. **Agent Card panel** — per-run "nutrition label": risk level, tools/MCPs touched, autonomy level, evidence of least privilege, human-in-the-loop status, suspicion score. Reuses existing card components.
+3. **Dependency / blast-radius graph** — extend the existing XYFlow run graph to show tool/agent→tool chains and highlight blast radius of flagged steps.
+4. **Audit trail + kill switch** — surface the existing `agent_run` ledger as a first-class audit trail and the existing approval gates as an explicit kill switch.
+
+## D. Security & scalability notes folded in
+
+- Least-privilege evidence on the Agent Card; record granted OAuth scopes per tool.
+- Move secrets (OAuth tokens) to a secrets manager; no permission inheritance across tools.
+- LLM-monitor scoring in a background worker/queue; Redis for shared cache when scaling to multiple instances; sample/pre-filter to control LLM cost.
+
+## E. External tools
+
+Outlook (and similar) follow the existing per-tool MCP + OAuth pattern via Microsoft Graph (Azure AD app). OAuth2 stays the default for user-delegated access; **service accounts / client-credentials** are the alternative for tenant-wide machine access (and the cleaner answer to permission-inheritance risk); API-key/PAT already supported for providers that issue keys.
+
+## F. Updated honest limitations
+
+The coarse `{step_type|risk|status}` LSTM token cannot see tool-call *content*, so the LSTM catches structural/ordering anomalies while missing semantic "scheming" (a plausible-looking call with a malicious payload). That gap is exactly what the LLM-monitor fills — stated as the motivation for the comparison, not a defect.

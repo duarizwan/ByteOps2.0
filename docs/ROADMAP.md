@@ -77,6 +77,23 @@ docs/
 
 ---
 
+## Phase 2 (added 2026-06-13): LLM-monitor track + governance features
+
+Grounded in the two supplied papers (Storf et al. black-box monitoring; Credo AI XAI-at-scale). See the spec addendum + plan Tasks 13–16.
+
+| Sprint | Focus | Plan tasks | Exit criteria |
+|---|---|---|---|
+| **S7 — LLM monitor** | Constitution + black-box monitor (no training data) | 13, 14 | Runs get a 1–10 LLM suspicion score on completion; works today without the trained model. |
+| **S8 — Governance UX** | Agent Card, dependency/blast-radius graph, kill switch, audit trail | 15, 16 | Per-run Agent Card + blast-radius graph render in the existing theme; approval gates surfaced as kill switch. |
+| **S9 — Comparison report** | LSTM vs Isolation Forest vs LLM-monitor | 8, 9, 13 | pAUROC@FPR<0.2 table across all three detectors for the DL course report. |
+
+Detector lineup (course deliverable = a 3-way comparison):
+- **Next-action LSTM** — trained, self-supervised, structural/ordering anomalies (your DL contribution).
+- **Isolation Forest** — classical baseline.
+- **LLM black-box monitor** — frontier baseline + production scorer, semantic anomalies, zero training data.
+
+Metric: **partial AUROC at FPR < 0.2** (the paper's metric for rare-event oversight), reported alongside F1. Scoring scale standardized to **1–10** across all detectors.
+
 ## Definition of Done
 
 - All new code TDD-covered; backend `pytest` and frontend `vitest` suites green.
