@@ -94,6 +94,22 @@ writes `outputs/comparison.md`:
 Open http://localhost:5000 — shows every training/eval run with params, metrics, and
 artifacts. This is strong "I ran real experiments" evidence for the report.
 
+## Step 5b — Run the experiment suite (the "study" for your report)
+
+```
+.venv/Scripts/python.exe scripts/run_experiments.py --data data/runs.jsonl --seeds 5 --epochs 20
+```
+Writes `outputs/experiments.md` and logs to MLflow. Produces three experiments
+(each over 5 seeds with 95% confidence intervals):
+- **Order ablation** — ordered vs shuffled sequences (proves sequence modeling is justified)
+- **Sequence-length sensitivity** — max_len 8/12/20
+- **Model capacity** — hidden size 16/48/96
+
+A 4th experiment (scoring-rule comparison via pAUROC) activates automatically once
+you've labeled red-team runs. These experiments work **even on small data** —
+they demonstrate DL methodology regardless of absolute numbers, which is what a
+course rewards.
+
 ## Step 6 — Live demo in ByteOps
 
 With the model trained (Step 2), open a flagged run in the `/runs` Execution Center —
