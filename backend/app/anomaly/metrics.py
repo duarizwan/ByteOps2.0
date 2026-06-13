@@ -65,4 +65,5 @@ def partial_auroc(labels, scores, max_fpr: float = 0.2) -> float:
 
 def auroc(labels, scores) -> float:
     fpr, tpr = roc_points(labels, scores)
-    return float(np.trapz(tpr, fpr))
+    _trap = getattr(np, "trapezoid", None) or np.trapz
+    return float(_trap(tpr, fpr))
