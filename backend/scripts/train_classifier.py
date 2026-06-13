@@ -61,9 +61,11 @@ def main():
     Model = BiLSTMAttention if a.model == "bilstm_attn" else TransformerEncoderClassifier
     model = Model(vocab_sizes, len(NUMERIC_FEATURES))
     opt = torch.optim.Adam(model.parameters(), lr=1e-3)
-    loss_fn = nn.BCEWithLogitsLoss()
     cat_tr, num_tr, mask_tr, y_tr = batch(train)
     cat_va, num_va, mask_va, y_va = batch(val)
+    n_pos = max(1.0, float((y_tr == 1).sum()))
+    n_neg = max(1.0, float((y_tr == 0).sum()))
+    loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(n_neg / n_pos))
 
     mlflow.set_tracking_uri("sqlite:///mlflow.db"); mlflow.set_experiment("byteops-anomaly-clf")
     best_val, best_state, patience, bad = 1e9, None, 6, 0
@@ -72,9 +74,15 @@ def main():
                            "holdout_type": a.holdout_type or "none", "n_train": len(train),
                            "tokenizer": "v2"})
         for ep in range(a.epochs):
-            model.train(); opt.zero_grad()
-            logit, _ = model(cat_tr, num_tr, mask_tr)
-            loss = loss_fn(logit, y_tr); loss.backward(); opt.step()
+            model.train()
+            perm = torch.randperm(y_tr.shape[0])
+            for i in range(0, y_tr.shape[0], 32):
+                bi = perm[i:i + 32]
+                cb = {f: cat_tr[f][bi] for f in CATEGORICAL_FIELDS}
+                opt.zero_grad()
+                logit, _ = model(cb, num_tr[bi], mask_tr[bi])
+                loss = loss_fn(logit, y_tr[bi])
+                loss.backward(); opt.step()
             model.eval()
             with torch.no_grad():
                 vlogit, _ = model(cat_va, num_va, mask_va)
