@@ -131,6 +131,34 @@ shouldn't (leaking data, deleting things, acting out of order)? You need an auto
    "Black-box" means it judges by *observable actions only*, not the agent's hidden
    reasoning. It needs **no training** — it's prompt-based.
 
+### V2 — Supervised attention study (added on top of the baselines)
+
+The project now includes a **supervised deep-learning study** alongside the three
+v1 baselines above. Two new architectures are trained on a labeled synthetic dataset
+(150 normal + 5 anomaly types × 15 examples each):
+
+- **BiLSTM + multi-head attention (core model)** — bidirectional LSTM with an
+  attention layer; produces per-step attention weights used for anomaly localization.
+- **Transformer Encoder (comparison)** — small self-attention architecture evaluated
+  side-by-side.
+
+Both are compared against the LSTM / Isolation Forest / LLM monitor baselines using
+the same primary metric: **partial AUROC at FPR < 0.2 (pAUROC)**. Key results on the
+synthetic set: BiLSTM+Attention reaches pAUROC ~0.94–0.99 / F1 ~0.95 and clearly
+outperforms Isolation Forest (pAUROC ~0.17–0.53). The attention mechanism localizes
+the injected anomalous step with ~96% attention weight, powering the **per-step heat
+marker** visible in the Execution Center on flagged runs.
+
+Ablations (action order, risk features, attention vs mean-pool, architecture, classical
+vs learned) are run via `scripts/run_experiments.py` and logged to MLflow.
+
+**Honest caveat:** training and evaluation data are fully synthetic and highly
+separable by design, so absolute numbers are optimistic. Real production telemetry
+would yield more modest results — this is stated explicitly in all reports.
+
+See `docs/DL_QUICKSTART.md` — "V2 — Supervised attention models" for the full
+6-command workflow.
+
 ### Why three?
 A real, professional anomaly project never reports one model alone. Comparing a
 trained model, a classical baseline, and a frontier LLM — using the right metric —

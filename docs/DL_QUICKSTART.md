@@ -23,6 +23,103 @@ The course deliverable is the **comparison** of these three on real telemetry, u
 
 ---
 
+## V2 — Supervised attention models (the strong DL study)
+
+This section documents the **v2 supervised workflow** added on top of the v1 baselines.
+The v1 self-supervised LSTM, Isolation Forest, and LLM monitor remain in the codebase
+as baselines — the commands below are new and complement them.
+
+All commands run from the `backend/` folder. `python` = `.venv/Scripts/python.exe`.
+
+### Step 1 — Generate a diverse synthetic dataset
+
+```
+python scripts/generate_dataset.py --normal 150 --per-type 15 --out data/gen.jsonl
+```
+
+Produces `data/gen.jsonl` — 150 normal sequences plus 5 × 15 anomaly-type examples
+(external send injection, tool repetition, destructive ops, out-of-order, data exfil).
+The dataset is fully synthetic and highly separable; see the honest caveat below.
+
+### Step 2 — Train the core BiLSTM+Attention supervised classifier
+
+```
+python scripts/train_classifier.py --data data/gen.jsonl --model bilstm_attn --epochs 60
+```
+
+Trains a **BiLSTM + multi-head attention** model with cross-entropy loss on the labeled
+dataset. Also available: `--model transformer` (small Transformer Encoder variant).
+Use `--holdout-type <type>` to test out-of-distribution generalization on a held-out
+anomaly class.
+
+**Outputs:**
+- `app/anomaly/artifacts/lstm_nextaction.onnx` — ONNX model (replaces the v1 artifact)
+- `app/anomaly/artifacts/vocab.json`, `model_meta.json`, `metrics.json`
+- MLflow run logged to `mlflow.db` with params, metrics, and artifacts
+
+The live app's Execution Center now shows **attention-localized per-step heat** on
+flagged runs — the attention weights highlight the injected anomalous step.
+
+### Step 3 — Run the detector comparison table
+
+```
+python scripts/evaluate_detectors.py --data data/gen.jsonl --no-llm
+```
+
+Writes `outputs/comparison.md` — a table of all four detectors:
+
+| Detector | Accuracy | Precision | Recall | F1 | AUROC | pAUROC |
+|---|---|---|---|---|---|---|
+| LSTM (next-action, v1) | … | … | … | … | … | … |
+| Isolation Forest | … | … | … | … | … | … |
+| **BiLSTM+Attention** | … | … | … | … | … | … |
+| Transformer Encoder | … | … | … | … | … | … |
+
+Key result: BiLSTM+Attention reaches **pAUROC ~0.94–0.99 / F1 ~0.95** on the synthetic
+set; it and the Transformer clearly outperform Isolation Forest (pAUROC ~0.17–0.53).
+
+### Step 4 — Run ablations
+
+```
+python scripts/run_experiments.py --data data/gen.jsonl --seeds 5
+```
+
+Writes `outputs/experiments.md` and logs to MLflow. Ablations include: action order,
+risk features, attention vs mean-pool, architecture comparison, and classical vs learned.
+
+### Step 5 — Generate report plots
+
+```
+python scripts/make_report.py --data data/gen.jsonl --epochs 50
+```
+
+Outputs: `outputs/confusion_matrix.png`, `outputs/roc_curve.png`,
+`outputs/attention_example.png`, `outputs/report_summary.md`.
+The attention example plot shows the model localizing the injected `forward_email` step
+(~96% attention weight on that step).
+
+### Step 6 — Open the MLflow dashboard
+
+```
+python -m mlflow ui --backend-store-uri sqlite:///mlflow.db
+```
+
+Open http://localhost:5000 to browse all training and eval runs.
+
+### Demo endpoint
+
+With the backend running: `POST /api/demo/rogue-run` spawns a sandboxed flagged run so
+you can show the anomaly heat marker without needing a real attack sequence.
+
+### Honest caveat on synthetic data
+
+The v2 numbers are strong because the dataset is **fully synthetic and highly separable**
+by design. Real telemetry from production agent runs would be more challenging and would
+yield more modest results. Always report this: "v2 training and evaluation data are
+synthetic; absolute metrics are optimistic relative to real deployment."
+
+---
+
 ## One-time setup
 
 Install the offline training dependencies (torch, scikit-learn, mlflow):
