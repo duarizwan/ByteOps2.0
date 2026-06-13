@@ -16,13 +16,20 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     print(f"[START] {settings.app_name} starting...")
 
-    # Auto-create tables if they don't exist
-    from app.core.database import Base
-    # Import all models so Base.metadata knows about them
-    import app.models  # noqa: F401
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    print("[OK] Database tables ready.")
+    # Schema is managed by Alembic (`alembic upgrade head`). Table auto-creation
+    # is opt-in for local dev only — never in production, where it would drift
+    # the schema away from the migration history.
+    import os
+
+    import app.models  # noqa: F401 - register models on Base.metadata
+
+    if os.getenv("AUTO_CREATE_TABLES", "false").lower() == "true":
+        from app.core.database import Base
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        print("[OK] Database tables auto-created (AUTO_CREATE_TABLES=true).")
+    else:
+        print("[OK] Skipping auto-create; schema managed by Alembic.")
 
     # Start background sync scheduler
     await start_scheduler()
@@ -46,13 +53,13 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS
+    # CORS — explicit allowlist (origins come from settings; no wildcards with credentials)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type"],
     )
 
     # Routers
