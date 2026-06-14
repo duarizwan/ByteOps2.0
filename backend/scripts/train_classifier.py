@@ -114,14 +114,21 @@ def main():
                 logit, attn = s.m({"step_type": st, "tool_name": tn, "action_category": ac}, num, mask)
                 return (logit, attn) if s.attn else logit
 
-        onnx_path = ARTIFACTS / f"clf_{a.model}.onnx"
+        # Distinct, versioned artifact names so v2 classifiers never overwrite the
+        # v1 self-supervised LSTM (lstm_nextaction_v1.onnx).
+        _ARTIFACT_STEM = {
+            "bilstm_attn": "bilstm_attention_classifier_v2",
+            "transformer": "transformer_encoder_classifier_v2",
+        }
+        stem = _ARTIFACT_STEM[a.model]
+        onnx_path = ARTIFACTS / f"{stem}.onnx"
         out_names = ["logit", "attn"] if emit_attn else ["logit"]
         torch.onnx.export(Wrap(model, emit_attn),
                           (*dummy_cat, num_te[:1], mask_te[:1]),
                           str(onnx_path),
                           input_names=["step_type", "tool_name", "action_category", "num", "mask"],
                           output_names=out_names, opset_version=14, dynamo=False)
-        (ARTIFACTS / f"clf_{a.model}_meta.json").write_text(json.dumps({
+        (ARTIFACTS / f"{stem}_meta.json").write_text(json.dumps({
             "model": a.model, "tokenizer": "v2", "max_len": a.max_len, "threshold": thr,
             "vocabs": vocabs, "numeric_features": NUMERIC_FEATURES, "metrics": result,
             "emits_attention": emit_attn,

@@ -151,7 +151,7 @@ def main() -> None:
     ARTIFACTS.mkdir(parents=True, exist_ok=True)
     dummy = torch.zeros(1, max_len, dtype=torch.long)
     torch.onnx.export(
-        model, dummy, str(ARTIFACTS / "lstm_nextaction.onnx"),
+        model, dummy, str(ARTIFACTS / "lstm_nextaction_v1.onnx"),
         input_names=["tokens"], output_names=["logits"], dynamic_axes=None,
         opset_version=13, dynamo=False,
     )
@@ -167,7 +167,7 @@ def main() -> None:
     if "isolation_forest" in metrics:
         flat.update({f"iso_{k}": v for k, v in metrics["isolation_forest"].items()})
     mlflow.log_metrics({k: float(v) for k, v in flat.items()})
-    mlflow.log_artifact(str(ARTIFACTS / "lstm_nextaction.onnx"))
+    mlflow.log_artifact(str(ARTIFACTS / "lstm_nextaction_v1.onnx"))
     mlflow.log_artifact(str(ARTIFACTS / "metrics.json"))
     mlflow.end_run()
 

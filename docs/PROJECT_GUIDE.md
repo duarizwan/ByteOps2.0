@@ -240,28 +240,43 @@ The system is built. The remaining work is **data**, which only you can produce:
 
 ## 9. How to present the project (step by step)
 
+> **Data honesty (say this up front):** the project uses **real normal telemetry**
+> (your actual agent runs) + **hand-labeled red-team runs where available** (rejected
+> approval-gate attempts) + a **controlled synthetic benchmark reported separately**.
+> We do NOT claim "no synthetic data." V1 and V2 are two distinct workflows:
+> - **V1 (real-telemetry, self-supervised):** the next-action LSTM trained on real runs.
+> - **V2 (synthetic, supervised):** BiLSTM+Attention and Transformer trained/evaluated on
+>   the controlled synthetic benchmark. **Its metrics are optimistic** (data is separable
+>   by design) and are reported separately from real-data results.
+
 A 5–10 minute presentation / demo flow:
 
 1. **The problem (30s).** "Companies run many AI agents; how do we know they behave?
    ByteOps unifies tools AND watches the agents for misbehavior."
-2. **Live demo — normal (1 min).** Type "summarize my emails", show the answer, then
-   open the Execution Center and show the run as a graph of steps.
-3. **Live demo — caught misbehavior (1 min).** Run a red-team prompt; show the run
-   flagged and the **heat marker on the exact bad step**, plus the LLM's reason.
-4. **The deep learning (2 min).** Show `train_anomaly.py`'s `NextActionLSTM` (embedding →
-   LSTM → output), explain self-supervised next-action prediction, show the loss going
-   down. State the method's lineage (DeepLog; Storf et al. 2026 — papers in `docs/papers/`).
-5. **The study (2 min).** Open `outputs/experiments.md` and the MLflow dashboard. Show
-   the **order ablation** ("I proved sequence order matters → a sequence model is
-   justified") and the comparison table (LSTM vs Isolation Forest vs LLM monitor) using
-   partial AUROC.
-6. **Honest limitations (30s).** "Small/low-diversity dataset → weak absolute numbers;
-   quality scales with data; future work is more data + a Transformer + attention."
+2. **Live demo — normal (1 min).** Type "summarize my emails"; open the Execution Center
+   and show the run as a graph of steps.
+3. **Safe sandbox demo — caught misbehavior (1 min).** Trigger `/api/demo/rogue-run`
+   (a **sandboxed simulation** — it injects a known unsafe step with no real effect; it is
+   a controlled demo, **not proof of real-world attack detection**). Show the run flagged
+   with the **heat marker on the exact bad step** + the reason.
+4. **V1 deep learning (1.5 min).** `train_anomaly.py`'s `NextActionLSTM` — self-supervised
+   next-action prediction on **real** runs (DeepLog lineage; Storf et al. 2026 in `docs/papers/`).
+5. **V2 supervised study (2.5 min).** The **BiLSTM+Attention (core)** and **Transformer**,
+   the **5-detector comparison** — Isolation Forest, Next-action LSTM, BiLSTM+Attention,
+   Transformer Encoder, LLM monitor — using **pAUROC@FPR<0.2** (`outputs/comparison.md` +
+   MLflow). Show the **ablations** (order, risk features, **intent/context features**,
+   attention vs mean-pool, architecture, classical vs learned) in `outputs/experiments.md`.
+   **State clearly these V2 numbers are on the synthetic benchmark and are optimistic.**
+6. **Honest limitations (30s).** Real-data results are modest and data-limited; the
+   synthetic-benchmark results are strong but optimistic by design; the two are reported
+   separately. Future work: richer real data + hand-labeled red-team at scale.
 7. **Why it matters (30s).** "Same anomaly layer is both a real product safety feature
    and a complete applied deep-learning study."
 
-**What to have ready:** the running app, the trained model, `outputs/experiments.md`,
-`outputs/comparison.md` (after red-team labeling), the MLflow UI, and the two papers.
+**What to have ready:** the running app, the trained artifacts
+(`lstm_nextaction_v1.onnx`, `bilstm_attention_classifier_v2.onnx`,
+`transformer_encoder_classifier_v2.onnx`), `outputs/comparison.md`,
+`outputs/experiments.md`, the MLflow UI, and the two papers.
 
 ---
 
@@ -288,11 +303,23 @@ move secrets to a manager, replace 30s polling with live updates.
 
 ## 11. Honest limitations (state these — they're a strength, not a weakness)
 
-- **Small data:** ~63 short runs today; the model can't discriminate well yet. The
-  *pipeline and method are correct*; quality scales with data.
-- **Self-generated data:** runs come from driven prompts, not real production traffic.
-- **The LSTM is small and modest** — a solid applied project, not a novel research model.
-- **The metrics that matter (detection) need red-team labels** you still have to create.
+**Two workflows, reported separately:**
+- **V1 (real telemetry, self-supervised LSTM):** trained on your real agent runs. Data is
+  small and low-diversity, so absolute numbers are modest. Red-team positives are limited
+  to hand-labeled rejected approval-gate attempts. This is the *real-world* result.
+- **V2 (synthetic benchmark, supervised BiLSTM+Attention / Transformer):** trained and
+  evaluated on a **controlled synthetic dataset**. Numbers are strong but **optimistic by
+  design** — the synthetic data is more separable than reality. These are reported as a
+  *benchmark*, never conflated with the real-data results.
+
+**General:**
+- We use **real normal telemetry + hand-labeled red-team where available + a controlled
+  synthetic benchmark** — we do not claim "no synthetic data."
+- The models are small and modest — a solid applied project, not a novel research model.
+- The `/api/demo/rogue-run` demo is a **safe sandbox simulation** (injected unsafe step,
+  no real effect); it illustrates the detector, it is not evidence of real-world attack
+  detection.
+- Real-world detection quality scales with more real data + more hand-labeled red-team runs.
 
 A professor respects an honest limitations section far more than inflated numbers. The
 strength here is a **correctly-built, end-to-end, well-evaluated system** — that's

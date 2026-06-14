@@ -28,8 +28,8 @@ class AttentionScorer:
         return self._session is not None
 
     def _load(self) -> None:
-        onnx_path = self._dir / "clf_bilstm_attn.onnx"
-        meta_path = self._dir / "clf_bilstm_attn_meta.json"
+        onnx_path = self._dir / "bilstm_attention_classifier_v2.onnx"
+        meta_path = self._dir / "bilstm_attention_classifier_v2_meta.json"
         if not (onnx_path.exists() and meta_path.exists()):
             logger.info("Attention model not found in %s; attention scoring disabled.", self._dir)
             return

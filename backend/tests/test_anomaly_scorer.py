@@ -33,7 +33,7 @@ def _write_fake_artifacts(tmp_path):
     graph = helper.make_graph([gather], "tiny", [tokens_in], [logits_out], [w_init])
     model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 13)])
     model.ir_version = 9
-    onnx.save(model, str(tmp_path / "lstm_nextaction.onnx"))
+    onnx.save(model, str(tmp_path / "lstm_nextaction_v1.onnx"))
     (tmp_path / "vocab.json").write_text(json.dumps(vocab), encoding="utf-8")
     (tmp_path / "model_meta.json").write_text(
         json.dumps({"max_len": max_len, "threshold": 2.0}), encoding="utf-8"

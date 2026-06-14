@@ -30,7 +30,7 @@ class AnomalyScorer:
         return self._session is not None
 
     def _load(self) -> None:
-        onnx_path = self._dir / "lstm_nextaction.onnx"
+        onnx_path = self._dir / "lstm_nextaction_v1.onnx"
         vocab_path = self._dir / "vocab.json"
         meta_path = self._dir / "model_meta.json"
         if not (onnx_path.exists() and vocab_path.exists() and meta_path.exists()):

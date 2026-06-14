@@ -52,9 +52,10 @@ dataset. Also available: `--model transformer` (small Transformer Encoder varian
 Use `--holdout-type <type>` to test out-of-distribution generalization on a held-out
 anomaly class.
 
-**Outputs:**
-- `app/anomaly/artifacts/lstm_nextaction.onnx` — ONNX model (replaces the v1 artifact)
-- `app/anomaly/artifacts/vocab.json`, `model_meta.json`, `metrics.json`
+**Outputs (V2 — distinct names; these NEVER overwrite the V1 LSTM artifact):**
+- `app/anomaly/artifacts/bilstm_attention_classifier_v2.onnx` (+ `_meta.json`) — core model
+- `app/anomaly/artifacts/transformer_encoder_classifier_v2.onnx` (+ `_meta.json`) — with `--model transformer`
+- (V1 self-supervised LSTM stays at `lstm_nextaction_v1.onnx`, untouched)
 - MLflow run logged to `mlflow.db` with params, metrics, and artifacts
 
 The live app's Execution Center now shows **attention-localized per-step heat** on
@@ -145,7 +146,7 @@ Produces `data/runs.jsonl` — one line per run, with its token sequence and lab
 ```
 This trains your deep-learning model and writes the artifacts that make the **live
 heat marker in ByteOps start working**:
-- `app/anomaly/artifacts/lstm_nextaction.onnx` — the trained model
+- `app/anomaly/artifacts/lstm_nextaction_v1.onnx` — the trained V1 model
 - `app/anomaly/artifacts/vocab.json`, `model_meta.json`, `metrics.json`
 
 ## Step 3 — Get a red-team (anomalous) set so detection can be MEASURED
@@ -234,7 +235,10 @@ localized the anomaly."
 1. **Method** — self-supervised next-action prediction (cite DeepLog / Storf et al. 2026,
    in `docs/papers/`). Show the `NextActionLSTM` class in `scripts/train_anomaly.py` and
    the tokenizer in `app/anomaly/tokenizer.py`.
-2. **Data** — real ByteOps agent telemetry + hand-labeled red-team runs (no synthetic data).
+2. **Data** — real normal telemetry + hand-labeled red-team where available (rejected
+   approval-gate attempts) + a controlled synthetic benchmark reported separately. The
+   synthetic-benchmark metrics are strong but optimistic by design; never conflate them
+   with the real-data results.
 3. **Result** — the `outputs/comparison.md` table + the MLflow dashboard.
 4. **Explainability** — the live per-step heat marker in the run graph.
 5. **Honest limitations** — small dataset → weak absolute numbers; report data-scaling as
