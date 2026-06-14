@@ -81,18 +81,20 @@ def _shuffle_tokens(seqs, rng):
 # ── supervised ablation trainer (feature-based BiLSTM/Transformer) ─────────────
 
 def _supervised_scores_ablation(model_name, train, test, *, shuffle=False, zero_num=False,
-                                attention=True, max_len=20, epochs=40, seed=42):
+                                zero_intent=False, attention=True, max_len=20, epochs=40, seed=42):
     """Train a feature model with optional ablation flags; return test anomaly scores.
 
     Mirrors evaluate_detectors.supervised_scores, adding:
-      shuffle=True   -> permute each run's steps before encoding (kills order signal)
-      zero_num=True  -> zero the numeric feature block (kills risk-level/external/etc.)
-      attention=False-> mean-pool LSTM outputs instead of attending (BiLSTM only)
+      shuffle=True     -> permute each run's steps before encoding (kills order signal)
+      zero_num=True    -> zero the numeric feature block (kills risk-level/external/etc.)
+      zero_intent=True -> zero ONLY the intent/context columns (kills intent-vs-tool signal)
+      attention=False  -> mean-pool LSTM outputs instead of attending (BiLSTM only)
     """
     import random
     import torch
     import torch.nn as nn
-    from app.anomaly.features import build_feature_vocabs, encode_run, CATEGORICAL_FIELDS, NUMERIC_FEATURES
+    from app.anomaly.features import build_feature_vocabs, encode_run, CATEGORICAL_FIELDS, NUMERIC_FEATURES, INTENT_FEATURES
+    _intent_cols = [NUMERIC_FEATURES.index(f) for f in INTENT_FEATURES]
     from app.anomaly.models import BiLSTMAttention, TransformerEncoderClassifier
     torch.manual_seed(seed)
 
@@ -110,11 +112,13 @@ def _supervised_scores_ablation(model_name, train, test, *, shuffle=False, zero_
     vsz = {f: len(vocabs[f]) for f in CATEGORICAL_FIELDS}
 
     def batch(items):
-        enc = [encode_run(r["steps"], vocabs, max_len) for r in items]
+        enc = [encode_run(r["steps"], vocabs, max_len, r.get("intent", "general")) for r in items]
         cat = {f: torch.tensor([e["cat"][f] for e in enc]) for f in CATEGORICAL_FIELDS}
         num = torch.tensor([e["num"] for e in enc], dtype=torch.float32)
         if zero_num:
             num = torch.zeros_like(num)
+        elif zero_intent:
+            num[:, :, _intent_cols] = 0.0
         mask = torch.tensor([e["mask"] for e in enc], dtype=torch.float32)
         y = torch.tensor([1.0 if r["label"] == "redteam" else 0.0 for r in items])
         return cat, num, mask, y
@@ -405,6 +409,7 @@ def main() -> None:
                         kwargs["model_name"], train, test,
                         shuffle=kwargs.get("shuffle", False),
                         zero_num=kwargs.get("zero_num", False),
+                        zero_intent=kwargs.get("zero_intent", False),
                         attention=kwargs.get("attention", True),
                         epochs=args.epochs, seed=seed,
                     )
@@ -430,6 +435,14 @@ def main() -> None:
                   "| Variant | pAUROC@FPR<0.2 (mean +/- 95% CI) |\n|---|---|"]
         run_variant("Full features", "risk_full", model_name="bilstm_attn", zero_num=False)
         run_variant("Risk features zeroed", "risk_zeroed", model_name="bilstm_attn", zero_num=True)
+
+        # 2b) Intent/context features — full vs intent columns zeroed. This is the key
+        #     ablation: without intent context the model can't tell an authorized risky
+        #     action (hard negative) from an unauthorized one (subtle positive).
+        lines += ["\n### Intent / context features (BiLSTM+Attention)\n",
+                  "| Variant | pAUROC@FPR<0.2 (mean +/- 95% CI) |\n|---|---|"]
+        run_variant("With intent features", "intent_on", model_name="bilstm_attn", zero_intent=False)
+        run_variant("Intent features zeroed", "intent_off", model_name="bilstm_attn", zero_intent=True)
 
         # 3) Attention — attention pooling vs masked mean-pool (BiLSTM).
         lines += ["\n### Attention vs mean-pool (BiLSTM)\n",

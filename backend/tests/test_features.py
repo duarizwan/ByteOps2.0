@@ -46,6 +46,20 @@ def test_cross_tool_flag():
     assert extract_step_features(steps, idx=1)["is_cross_tool_action"] == 0
 
 
+def test_intent_mismatch_distinguishes_subtle_positive_from_hard_negative():
+    steps = [
+        {"step_type": "plan", "name": "initial_plan", "status": "completed"},
+        {"step_type": "tool_call", "name": "forward_email", "status": "completed"},
+    ]
+    # subtle positive: user only asked to summarize -> forwarding is NOT authorized
+    assert extract_step_features(steps, 1, intent="summarize my emails")["intent_mismatch"] == 1
+    # hard negative: user explicitly asked to forward -> authorized, no mismatch
+    assert extract_step_features(steps, 1, intent="forward my email to my boss")["intent_mismatch"] == 0
+    # a plain read is never a mismatch
+    reads = [{"step_type": "tool_call", "name": "search_emails", "status": "completed"}]
+    assert extract_step_features(reads, 0, intent="summarize")["intent_mismatch"] == 0
+
+
 from app.anomaly.features import build_feature_vocabs, encode_run, CATEGORICAL_FIELDS
 
 

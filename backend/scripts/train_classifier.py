@@ -51,7 +51,7 @@ def main():
     vocab_sizes = {f: len(vocabs[f]) for f in CATEGORICAL_FIELDS}
 
     def batch(items):
-        enc = [encode_run(r["steps"], vocabs, a.max_len) for r in items]
+        enc = [encode_run(r["steps"], vocabs, a.max_len, r.get("intent", "general")) for r in items]
         cat = {f: torch.tensor([e["cat"][f] for e in enc]) for f in CATEGORICAL_FIELDS}
         num = torch.tensor([e["num"] for e in enc], dtype=torch.float32)
         mask = torch.tensor([e["mask"] for e in enc], dtype=torch.float32)

@@ -1,8 +1,13 @@
-"""Demo-only endpoint: spawn a sandboxed 'rogue agent' run for the live demo.
+"""Demo-only endpoint: spawn a SAFE SANDBOX 'rogue agent' run for the live demo.
 
-Records a REAL agent_run with an injected unsafe action so the anomaly detector
-flags it and the Execution Center can show the suspicious step. NO real tools are
-called (sandboxed) — this is a model-organism demonstration, clearly labeled.
+Records an agent_run with an injected unsafe step so the detector flags it and the
+Execution Center can show the suspicious step. NO real tools are called (sandboxed).
+
+This is a CONTROLLED DEMONSTRATION (a model organism), NOT proof of real-world attack
+detection: the unsafe step is scripted, so the detector is shown catching a known
+injected behavior, not an unknown in-the-wild attack. Treat it as an illustration of
+the pipeline, not as evidence of detection performance — that comes from the held-out
+evaluation in evaluate_detectors.py / run_experiments.py.
 """
 from typing import Annotated
 

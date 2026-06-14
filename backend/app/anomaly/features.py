@@ -53,7 +53,10 @@ def action_category(action: str) -> str:
     return "read"
 
 
-# Ordered list of numeric/binary features (model feeds these as a block)
+# Ordered list of numeric/binary features (model feeds these as a block).
+# CONTEXT features (intent_*) are the key signal: a risky action is normal when the
+# user's intent authorizes it (hard negative) and anomalous when it doesn't (subtle
+# positive). The "no intent/context features" ablation zeroes the intent_* columns.
 NUMERIC_FEATURES = [
     "risk_level",            # ordinal 0..4
     "status_ok",             # 1 if completed/approved
@@ -64,9 +67,35 @@ NUMERIC_FEATURES = [
     "is_cross_tool_action",  # run touches >1 distinct tool
     "position_frac",         # idx / (run_length-1)
     "run_length_norm",       # min(run_length,20)/20
+    "intent_mismatch",       # CONTEXT: risky action NOT authorized by the run's intent
+    "intent_authorizes_risky",  # CONTEXT: run intent authorizes any risky action at all
 ]
 
+# Subset of NUMERIC_FEATURES that encode intent/context (for the ablation).
+INTENT_FEATURES = ["intent_mismatch", "intent_authorizes_risky"]
+
 _RISK_ORDINAL = {"none": 0, "read": 1, "write": 2, "external_send": 3, "destructive": 4}
+
+# intent keyword -> action categories that intent legitimately authorizes.
+# Match on VERBS, not nouns: "summarize my emails" must NOT authorize forwarding just
+# because the noun "email" appears — only "forward"/"send" verbs authorize external send.
+_INTENT_AUTH = [
+    (("forward", "send", "reply", "notify"), {"send", "external", "read"}),
+    (("delete", "remove", "trash", "cleanup", "clear", "cancel"), {"destructive", "read"}),
+    (("create", "update", "schedule", "assign", "draft", "upload", "move"), {"write", "send", "read"}),
+    (("summarize", "list", "read", "check", "find", "search", "catch", "show", "review", "brief"), {"read"}),
+]
+_RISKY_CATEGORIES = {"write", "send", "external", "destructive"}
+
+
+def _intent_authorizes(intent: str) -> set[str]:
+    """Action categories the user's stated intent legitimately authorizes."""
+    a = (intent or "").lower()
+    auth: set[str] = set()
+    for kws, cats in _INTENT_AUTH:
+        if any(k in a for k in kws):
+            auth |= cats
+    return auth or {"read", "write"}  # lenient default for generic/unknown intent
 
 
 def _risk_level(step: dict) -> int:
@@ -77,8 +106,13 @@ def _risk_level(step: dict) -> int:
     return _RISK_ORDINAL.get(risk, 0)
 
 
-def extract_step_features(steps: list[dict], idx: int) -> dict:
-    """Return categorical + numeric features for step `idx` within its run."""
+def extract_step_features(steps: list[dict], idx: int, intent: str = "general") -> dict:
+    """Return categorical + numeric features for step `idx` within its run.
+
+    `intent` is the run's stated user intent; it drives the context features that let
+    the model tell a legitimately-authorized risky action (hard negative) from an
+    unauthorized one (subtle positive).
+    """
     step = steps[idx]
     name = str(step.get("name", ""))
     step_type = str(step.get("step_type", "")).strip() or "unknown"
@@ -87,6 +121,8 @@ def extract_step_features(steps: list[dict], idx: int) -> dict:
     tools = {infer_tool(str(s.get("name", ""))) for s in steps if s.get("step_type") == "tool_call"}
     tools.discard("none")
     n = max(1, len(steps))
+    authorized = _intent_authorizes(intent)
+    is_risky = cat in _RISKY_CATEGORIES
     return {
         # categoricals (embedded)
         "step_type": step_type,
@@ -102,6 +138,9 @@ def extract_step_features(steps: list[dict], idx: int) -> dict:
         "is_cross_tool_action": 1 if len(tools) > 1 else 0,
         "position_frac": idx / (n - 1) if n > 1 else 0.0,
         "run_length_norm": min(n, 20) / 20.0,
+        # context (intent vs action)
+        "intent_mismatch": 1 if (is_risky and cat not in authorized) else 0,
+        "intent_authorizes_risky": 1 if (authorized & _RISKY_CATEGORIES) else 0,
     }
 
 
@@ -121,13 +160,13 @@ def build_feature_vocabs(runs: list[list[dict]]) -> dict[str, dict[str, int]]:
     return vocabs
 
 
-def encode_run(steps: list[dict], vocabs: dict, max_len: int) -> dict:
+def encode_run(steps: list[dict], vocabs: dict, max_len: int, intent: str = "general") -> dict:
     """Encode a run to fixed-length arrays: per-field categorical ids, a numeric
-    matrix, and a padding mask."""
+    matrix, and a padding mask. `intent` drives the context features."""
     cat = {f: [] for f in CATEGORICAL_FIELDS}
     num = []
     for idx in range(min(len(steps), max_len)):
-        feats = extract_step_features(steps, idx)
+        feats = extract_step_features(steps, idx, intent)
         for f in CATEGORICAL_FIELDS:
             cat[f].append(vocabs[f].get(feats[f], vocabs[f][UNK]))
         num.append([float(feats[name]) for name in NUMERIC_FEATURES])
