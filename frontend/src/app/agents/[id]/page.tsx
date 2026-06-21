@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -174,9 +174,8 @@ function RunHistoryList({ runs }: { runs: AgentRun[] }) {
                     </thead>
                     <tbody>
                         {runs.map((run) => (
-                            <>
+                            <React.Fragment key={run.id}>
                                 <tr
-                                    key={run.id}
                                     onClick={() => setExpandedId(expandedId === run.id ? null : run.id)}
                                     className="border-b border-border/60 hover:bg-accent/50 cursor-pointer transition-colors"
                                 >
@@ -206,7 +205,7 @@ function RunHistoryList({ runs }: { runs: AgentRun[] }) {
                                         </td>
                                     </tr>
                                 )}
-                            </>
+                            </React.Fragment>
                         ))}
                     </tbody>
                 </table>
