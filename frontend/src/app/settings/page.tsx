@@ -94,19 +94,19 @@ function SettingsContent() {
     };
 
     return (
-        <div className="h-screen flex flex-col bg-background overflow-hidden">
+        <div className="h-screen flex flex-col bg-background overflow-hidden max-lg:h-auto max-lg:min-h-screen max-lg:overflow-y-auto">
             <TopBar />
             <Suspense>
                 <CallbackToast />
             </Suspense>
 
-            <div className="flex flex-1 overflow-hidden">
+            <div className="flex flex-1 overflow-hidden max-lg:flex-col max-lg:overflow-visible">
                 {/* Sidebar */}
                 <div
-                    className="flex-shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out"
+                    className="flex-shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out max-lg:!w-full max-lg:border-b max-lg:border-border"
                     style={{ width: isLeftCollapsed ? 64 : 256 }}
                 >
-                    <div className="h-full" style={{ width: isLeftCollapsed ? 64 : 256 }}>
+                    <div className="h-full max-lg:h-16 max-lg:!w-full" style={{ width: isLeftCollapsed ? 64 : 256 }}>
                         <CollapsibleSidebar
                             isCollapsed={isLeftCollapsed}
                             onToggleCollapse={() => setIsLeftCollapsed((v) => !v)}
@@ -121,7 +121,7 @@ function SettingsContent() {
                 </div>
 
                 {/* Main content */}
-                <div className="flex-1 overflow-y-auto p-8 bg-chat-bg m-3 rounded-2xl custom-scrollbar">
+                <div className="flex-1 overflow-y-auto p-8 bg-chat-bg m-3 rounded-2xl custom-scrollbar max-lg:m-0 max-lg:rounded-none max-lg:p-4">
                     <div className="max-w-6xl mx-auto">
                         {/* Header */}
                         <div className="mb-8">

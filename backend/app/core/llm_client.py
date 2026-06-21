@@ -1,6 +1,12 @@
 """Provider-agnostic async LLM client.
 
-Supported providers (first key present in .env wins):
+Supported providers:
+  LLM_PROVIDER=auto       → first key present wins
+  LLM_PROVIDER=claude     → Anthropic
+  LLM_PROVIDER=gemini     → Google Gemini (OpenAI-compatible endpoint)
+  LLM_PROVIDER=groq       → Groq (OpenAI-compatible endpoint)
+
+Keys:
   CLAUDE_API_KEY → Anthropic  (anthropic SDK)
   GEMINI_API_KEY → Google Gemini (OpenAI-compatible endpoint)
   GROQ_API_KEY   → Groq         (OpenAI-compatible endpoint)
@@ -54,14 +60,16 @@ class LLMClient:
         from app.core.config import get_settings
         settings = get_settings()
 
-        if settings.claude_api_key:
+        provider = self._select_provider(settings)
+
+        if provider == "anthropic":
             import anthropic as _ant
             self._provider = "anthropic"
             self._client = _ant.AsyncAnthropic(api_key=settings.claude_api_key)
             self._ant = _ant
-            self.default_model = settings.llm_model or "claude-sonnet-4-6"
+            self.default_model = self._select_model(settings.llm_model, "anthropic")
 
-        elif settings.gemini_api_key:
+        elif provider == "gemini":
             from openai import AsyncOpenAI
             self._provider = "gemini"
             self._client = AsyncOpenAI(
@@ -69,9 +77,9 @@ class LLMClient:
                 base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
             )
             self._ant = None
-            self.default_model = settings.llm_model or "gemini-2.0-flash"
+            self.default_model = self._select_model(settings.llm_model, "gemini")
 
-        elif settings.groq_api_key:
+        elif provider == "groq":
             from openai import AsyncOpenAI
             self._provider = "groq"
             self._client = AsyncOpenAI(
@@ -79,13 +87,7 @@ class LLMClient:
                 base_url="https://api.groq.com/openai/v1",
             )
             self._ant = None
-            self.default_model = settings.llm_model or "llama-3.3-70b-versatile"
-
-        else:
-            raise ValueError(
-                "No LLM API key found. Set CLAUDE_API_KEY, GEMINI_API_KEY, "
-                "or GROQ_API_KEY in your .env file."
-            )
+            self.default_model = self._select_model(settings.llm_model, "groq")
 
     # ── Public interface ───────────────────────────────────────────────────────
 
@@ -294,6 +296,64 @@ class LLMClient:
 
     def _is_rate_limit(self, exc: Exception) -> bool:
         return "RateLimit" in type(exc).__name__ or "rate_limit" in str(exc).lower()
+
+    def _select_provider(self, settings: Any) -> str:
+        requested = (getattr(settings, "llm_provider", "auto") or "auto").strip().lower()
+        aliases = {
+            "anthropic": "anthropic",
+            "claude": "anthropic",
+            "gemini": "gemini",
+            "google": "gemini",
+            "groq": "groq",
+        }
+
+        if requested != "auto":
+            if requested not in aliases:
+                raise ValueError(
+                    "LLM_PROVIDER must be one of: auto, claude, gemini, groq."
+                )
+            provider = aliases[requested]
+            key_field = {
+                "anthropic": "claude_api_key",
+                "gemini": "gemini_api_key",
+                "groq": "groq_api_key",
+            }[provider]
+            if not getattr(settings, key_field):
+                env_name = {
+                    "anthropic": "CLAUDE_API_KEY",
+                    "gemini": "GEMINI_API_KEY",
+                    "groq": "GROQ_API_KEY",
+                }[provider]
+                raise ValueError(f"LLM_PROVIDER={requested} requires {env_name}.")
+            return provider
+
+        if settings.claude_api_key:
+            return "anthropic"
+        if settings.gemini_api_key:
+            return "gemini"
+        if settings.groq_api_key:
+            return "groq"
+        raise ValueError(
+            "No LLM API key found. Set CLAUDE_API_KEY, GEMINI_API_KEY, "
+            "or GROQ_API_KEY in your .env file."
+        )
+
+    def _select_model(self, configured_model: str, provider: str) -> str:
+        defaults = {
+            "anthropic": "claude-sonnet-4-6",
+            "gemini": "gemini-2.0-flash",
+            "groq": "llama-3.3-70b-versatile",
+        }
+        model = (configured_model or "").strip()
+        if not model:
+            return defaults[provider]
+        if provider == "anthropic" and model.startswith("claude-"):
+            return model
+        if provider == "gemini" and model.startswith("gemini-"):
+            return model
+        if provider == "groq" and not model.startswith(("claude-", "gemini-")):
+            return model
+        return defaults[provider]
 
 
 @lru_cache(maxsize=1)

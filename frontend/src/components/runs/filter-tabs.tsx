@@ -15,15 +15,15 @@ interface FilterTabsProps {
 
 export function FilterTabs({ active, onChange }: FilterTabsProps) {
     return (
-        <div style={{ display: "flex", gap: 2 }}>
+        <div aria-label="Run filters" role="tablist" style={{ display: "flex", gap: 2 }}>
             {TABS.map(({ value, label }) => {
                 const isActive = active === value;
                 return (
                     <button
                         key={value}
-                        role="button"
-                        aria-label={label}
+                        role="tab"
                         aria-selected={isActive}
+                        type="button"
                         onClick={() => onChange(value)}
                         style={{
                             padding: "4px 10px",

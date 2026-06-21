@@ -45,7 +45,7 @@ function GraphCanvasInner({ selectedRunId, onLoad }: GraphCanvasProps) {
         }
     }, [isLoading, run, error, onLoad]);
     const { fitView } = useReactFlow();
-    const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+    const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
     const { nodes: derivedNodes, edges: derivedEdges } = useMemo(() => {
         if (!run) return { nodes: [], edges: [] };
@@ -54,6 +54,10 @@ function GraphCanvasInner({ selectedRunId, onLoad }: GraphCanvasProps) {
 
     const [nodes, setNodes, onNodesChange] = useNodesState(derivedNodes);
     const [edges, setEdges, onEdgesChange] = useEdgesState(derivedEdges);
+    const selectedNode = useMemo(
+        () => nodes.find((node) => node.id === selectedNodeId) as GraphNode | undefined,
+        [nodes, selectedNodeId]
+    );
 
     useEffect(() => {
         setNodes(derivedNodes);
@@ -63,16 +67,15 @@ function GraphCanvasInner({ selectedRunId, onLoad }: GraphCanvasProps) {
                 markerEnd: { type: MarkerType.ArrowClosed, color: e.style?.stroke },
             }))
         );
-        setSelectedNode(null);
         const t = setTimeout(() => fitView({ padding: 0.25, duration: 400 }), 80);
         return () => clearTimeout(t);
     }, [derivedNodes, derivedEdges, setNodes, setEdges, fitView]);
 
     const handleNodeClick = useCallback((_: React.MouseEvent, node: { id: string; data: unknown; position: { x: number; y: number }; width?: number; height?: number }) => {
-        setSelectedNode(node as GraphNode);
+        setSelectedNodeId(node.id);
     }, []);
 
-    const handlePaneClick = useCallback(() => setSelectedNode(null), []);
+    const handlePaneClick = useCallback(() => setSelectedNodeId(null), []);
     const handleFitView = useCallback(() => fitView({ padding: 0.2, duration: 400 }), [fitView]);
 
     if (!selectedRunId) {
@@ -191,7 +194,7 @@ function GraphCanvasInner({ selectedRunId, onLoad }: GraphCanvasProps) {
             {selectedNode && (
                 <NodeDetailPopup
                     node={selectedNode}
-                    onClose={() => setSelectedNode(null)}
+                    onClose={() => setSelectedNodeId(null)}
                 />
             )}
         </div>

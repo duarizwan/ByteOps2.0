@@ -1,7 +1,9 @@
 """ByteOps backend application configuration."""
 
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from functools import lru_cache
+from typing import Any
 
 
 class Settings(BaseSettings):
@@ -31,7 +33,9 @@ class Settings(BaseSettings):
     backend_cors_origins: str = "http://localhost:3000"
 
     # --- AI / LLM ---
-    # Set whichever key is active; first present wins: Claude > Gemini > Groq
+    # LLM_PROVIDER can be "auto", "claude", "gemini", or "groq".
+    # In auto mode, first present key wins: Claude > Gemini > Groq.
+    llm_provider: str = "auto"
     claude_api_key: str = ""
     gemini_api_key: str = ""
     groq_api_key: str = ""
@@ -73,6 +77,13 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.backend_cors_origins.split(",")]
+
+    @field_validator("debug", mode="before")
+    @classmethod
+    def normalize_debug(cls, value: Any) -> Any:
+        if isinstance(value, str) and value.lower() in {"release", "prod", "production"}:
+            return False
+        return value
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

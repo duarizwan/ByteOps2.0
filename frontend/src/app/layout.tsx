@@ -12,8 +12,6 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "ByteOps — AI-Powered Productivity Platform",
-  description:
-    "Consolidate your business tools with an intelligent AI assistant. Connect Gmail, Slack, JIRA, GitHub, and more.",
   icons: {
     icon: "/favicon.svg",
   },

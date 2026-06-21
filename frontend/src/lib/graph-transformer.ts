@@ -136,7 +136,7 @@ const STEP_NAME_MAP: Record<string, string> = {
     workflow_creation_response:    "Workflow Created",
 };
 
-function humanizeStepName(name: string): string {
+function stepLabel(name: string): string {
     if (STEP_NAME_MAP[name]) return STEP_NAME_MAP[name];
     return name
         .replace(/_tool$/, "")           // strip trailing _tool suffix
@@ -299,7 +299,7 @@ export function graphTransformer(run: AgentRun): { nodes: GraphNode[]; edges: Gr
     run.steps.forEach((step) => {
         const nodeType = stepTypeToNodeType(step);
         const sublabel = buildSublabel(nodeType, step, run);
-        nodes.push(makeNode(step.id, nodeType, step.name, sublabel, step, run, heatFor(step.id)));
+        nodes.push(makeNode(step.id, nodeType, stepLabel(step.name), sublabel, step, run, heatFor(step.id)));
     });
 
     // 3 — Parallel band detection

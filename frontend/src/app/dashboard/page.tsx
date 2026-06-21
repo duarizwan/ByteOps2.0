@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect, Suspense } from "react";
+import { useState, useCallback, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Panel, Group, Separator, usePanelRef } from "react-resizable-panels";
 import { TopBar } from "@/components/dashboard/top-bar";
@@ -27,12 +27,6 @@ function DashboardContent() {
     const [chatKey, setChatKey] = useState(0);
     const { conversations, isLoading, refresh, deleteConversation, renameConversation } =
         useConversations();
-
-    // If navigated from another page with ?conversation=<id>, open that thread
-    useEffect(() => {
-        const id = searchParams.get("conversation");
-        if (id) setActiveConversationId(id);
-    }, [searchParams]);
 
     // Ref to the ContextPanel's refresh function — populated by the panel itself
     const contextRefreshRef = useRef<(() => void) | null>(null);
@@ -83,18 +77,18 @@ function DashboardContent() {
     };
 
     return (
-        <div className="h-screen flex flex-col bg-background overflow-hidden">
+        <div className="h-screen flex flex-col bg-background overflow-hidden max-lg:h-auto max-lg:min-h-screen max-lg:overflow-y-auto">
             <TopBar />
 
             {/* Main 3-panel area */}
-            <div className="flex flex-1 overflow-hidden">
+            <div className="flex flex-1 overflow-hidden max-lg:flex-col max-lg:overflow-visible">
 
                 {/* ── Left Sidebar ───────────────────────────────────────────── */}
                 <div
-                    className="flex-shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out"
+                    className="flex-shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out max-lg:!w-full max-lg:border-b max-lg:border-border"
                     style={{ width: isLeftCollapsed ? 64 : 256 }}
                 >
-                    <div className="h-full" style={{ width: isLeftCollapsed ? 64 : 256 }}>
+                    <div className="h-full max-lg:h-16 max-lg:!w-full" style={{ width: isLeftCollapsed ? 64 : 256 }}>
                         <CollapsibleSidebar
                             isCollapsed={isLeftCollapsed}
                             onToggleCollapse={() => setIsLeftCollapsed((v) => !v)}
@@ -112,11 +106,11 @@ function DashboardContent() {
                 {/* ── Center + Right: resizable ───────────────────────────────── */}
                 <Group
                     orientation="horizontal"
-                    className="flex-1 overflow-hidden"
+                    className="flex-1 overflow-hidden max-lg:flex max-lg:flex-col max-lg:min-h-[calc(100vh-8rem)]"
                     defaultLayout={{ chat: 65, context: 35 }}
                 >
                     {/* Chat Panel */}
-                    <Panel id="chat" minSize="30%">
+                    <Panel id="chat" minSize="30%" className="max-lg:min-h-[70vh]">
                         <div className="h-full overflow-hidden">
                             <ChatInterface
                                 key={chatKey}
@@ -131,7 +125,7 @@ function DashboardContent() {
 
                     {/* Resize handle */}
                     <Separator
-                        className="w-1 flex-shrink-0 cursor-col-resize transition-colors"
+                        className="w-1 flex-shrink-0 cursor-col-resize transition-colors max-lg:hidden"
                         style={{ background: "var(--border)" }}
                     />
 
@@ -144,6 +138,7 @@ function DashboardContent() {
                         defaultSize="35%"
                         minSize="20%"
                         maxSize="45%"
+                        className="max-lg:min-h-[32rem]"
                     >
                         <div className="h-full overflow-hidden">
                             <ContextPanel

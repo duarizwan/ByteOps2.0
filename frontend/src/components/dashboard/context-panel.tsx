@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils";
 import { useNotifications, Notification } from "@/hooks/use-notifications";
 import { useWorkflows, WorkflowItem } from "@/hooks/use-workflows";
 import { useAgentRuns } from "@/hooks/use-agent-runs";
-import type { AgentRun, AgentRunStep } from "@/hooks/use-agent-runs";
+import type { AgentRunStep } from "@/hooks/use-agent-runs";
 
 /* ========================
    Sync status types + hook

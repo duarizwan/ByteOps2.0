@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import {
     ArrowLeft,
     Activity,
@@ -237,12 +237,9 @@ function StatPill({ icon, label, value, highlight }: {
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function TraceDrawer({ run, onClose }: TraceDrawerProps) {
-    const [isGraphReady, setIsGraphReady] = useState(false);
-    const handleGraphLoad = useCallback(() => setIsGraphReady(true), []);
-
-    useEffect(() => {
-        setIsGraphReady(false);
-    }, [run?.id]);
+    const [graphReadyRunId, setGraphReadyRunId] = useState<string | null>(null);
+    const isGraphReady = !!run && graphReadyRunId === run.id;
+    const handleGraphLoad = useCallback(() => setGraphReadyRunId(run?.id ?? null), [run?.id]);
 
     if (!run) return null;
 

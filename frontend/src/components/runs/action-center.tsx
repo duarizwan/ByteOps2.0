@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Activity } from "lucide-react";
 import { useAgentRuns, type AgentRun } from "@/hooks/use-agent-runs";
@@ -20,8 +20,10 @@ const WRITE_VERBS = new Set([
     "close", "reopen", "remove",
 ]);
 
-function hasCrudOperation(run: AgentRun): boolean {
+function shouldShowInTraceFeed(run: AgentRun): boolean {
     if (run.status === "waiting_approval") return true;
+    if (run.intent === "workflow") return true;
+    if (run.metadata && typeof run.metadata === "object" && "workflow_id" in run.metadata) return true;
     return (run.steps ?? []).some((step) => {
         if (step.step_type !== "tool_call") return false;
         return WRITE_VERBS.has(step.name.split("_")[0].toLowerCase());
@@ -125,15 +127,10 @@ export function ActionCenter() {
     const { runs, isLoading } = useAgentRuns();
 
     const [filterTab, setFilterTab]   = useState<FilterTab>("all");
-    const [traceRunId, setTraceRunId] = useState<string | null>(null);
+    const [traceRunId, setTraceRunId] = useState<string | null>(() => searchParams.get("trace"));
     const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
-    const traceParam = searchParams.get("trace");
 
-    useEffect(() => {
-        if (traceParam) setTraceRunId(traceParam);
-    }, [traceParam]);
-
-    const visibleRuns = runs.filter(hasCrudOperation);
+    const visibleRuns = runs.filter(shouldShowInTraceFeed);
     const { pending, failed, history } = categorize(visibleRuns, filterTab, dismissedIds);
     const dateGroups = groupByDate(history);
 

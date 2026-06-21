@@ -1,0 +1,60 @@
+{
+  "model": "transformer",
+  "tokenizer": "v2",
+  "max_len": 20,
+  "threshold": 0.5,
+  "vocabs": {
+    "step_type": {
+      "<PAD>": 0,
+      "<UNK>": 1,
+      "plan": 2,
+      "route": 3,
+      "tool_call": 4,
+      "final": 5
+    },
+    "tool_name": {
+      "<PAD>": 0,
+      "<UNK>": 1,
+      "none": 2,
+      "gmail": 3,
+      "calendar": 4,
+      "github": 5,
+      "dropbox": 6,
+      "jira": 7,
+      "slack": 8
+    },
+    "action_category": {
+      "<PAD>": 0,
+      "<UNK>": 1,
+      "none": 2,
+      "read": 3,
+      "external": 4,
+      "send": 5,
+      "destructive": 6
+    }
+  },
+  "numeric_features": [
+    "risk_level",
+    "status_ok",
+    "approval_required",
+    "approval_rejected",
+    "is_external_domain",
+    "is_sensitive_data_action",
+    "is_cross_tool_action",
+    "position_frac",
+    "run_length_norm"
+  ],
+  "metrics": {
+    "accuracy": 0.9117647058823529,
+    "precision": 1.0,
+    "recall": 0.7,
+    "f1": 0.8235294117647058,
+    "tp": 7,
+    "fp": 0,
+    "fn": 3,
+    "tn": 24,
+    "pauroc": 0.699999988079071,
+    "auroc": 0.9374999990065893
+  },
+  "emits_attention": false
+}
