@@ -41,6 +41,12 @@ class AgentRun(Base):
     conversation_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    hired_agent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hired_agents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     user_message_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("messages.id", ondelete="SET NULL"), nullable=True
     )
