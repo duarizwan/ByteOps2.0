@@ -271,9 +271,9 @@ export default function AgentDetailPage() {
     };
 
     const successRate =
-        agent && agent.total_runs > 0
+        runs.length > 0
             ? Math.round(
-                  (runs.filter((r) => r.status === "completed").length / agent.total_runs) * 100
+                  (runs.filter((r) => r.status === "completed").length / runs.length) * 100
               )
             : null;
 
@@ -384,7 +384,7 @@ export default function AgentDetailPage() {
                     <KpiCard
                         label="Success Rate"
                         value={successRate !== null ? `${successRate}%` : "—"}
-                        sub={successRate !== null ? `${runs.filter(r => r.status === "completed").length} / ${agent.total_runs} completed` : undefined}
+                        sub={successRate !== null ? `${runs.filter(r => r.status === "completed").length} / ${runs.length} of last ${runs.length} runs` : undefined}
                     />
                     <KpiCard
                         label="Last Run"
