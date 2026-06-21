@@ -76,7 +76,12 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins(self) -> list[str]:
-        return [origin.strip() for origin in self.backend_cors_origins.split(",")]
+        origins = [origin.strip() for origin in self.backend_cors_origins.split(",") if origin.strip()]
+        # Always allow localhost in development so missing .env doesn't block local work
+        for local in ("http://localhost:3000", "http://127.0.0.1:3000"):
+            if local not in origins:
+                origins.append(local)
+        return origins
 
     @field_validator("debug", mode="before")
     @classmethod

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
 import { Sun, Moon, Settings, HelpCircle } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
@@ -9,12 +10,20 @@ import { ByteOpsLogoMark } from "@/lib/brand-icons";
 import { useToolConnections } from "@/hooks/use-tool-connections";
 import { TOOL_CAPABILITIES } from "@/lib/tool-capabilities";
 
+const NAV_LINKS = [
+    { href: "/dashboard", label: "Chat" },
+    { href: "/runs", label: "Runs" },
+    { href: "/agents", label: "Agents" },
+    { href: "/analytics", label: "Analytics" },
+];
+
 export function TopBar() {
     const { resolvedTheme, setTheme, theme, mounted } = useTheme();
     const [showHelp, setShowHelp] = useState(false);
     const helpRef = useRef<HTMLDivElement>(null);
     const { connections } = useToolConnections();
     const connectedTools = connections.filter(c => c.status === "connected");
+    const pathname = usePathname();
 
     const toggleTheme = () => {
         if (theme === "dark") setTheme("light");
@@ -46,6 +55,26 @@ export function TopBar() {
                     <p className="text-xs text-muted-foreground">AI Work Assistant</p>
                 </div>
             </Link>
+
+            {/* Center — Navigation */}
+            <nav className="hidden md:flex items-center gap-1">
+                {NAV_LINKS.map(({ href, label }) => {
+                    const isActive = pathname === href || (href !== "/dashboard" && pathname?.startsWith(href));
+                    return (
+                        <Link
+                            key={href}
+                            href={href}
+                            className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                                isActive
+                                    ? "bg-accent text-foreground font-medium"
+                                    : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                            }`}
+                        >
+                            {label}
+                        </Link>
+                    );
+                })}
+            </nav>
 
             {/* Right — Actions */}
             <div className="flex items-center gap-3">

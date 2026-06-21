@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Agent Detail — ByteOps Mockup</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f1117;
+    --card: #161b27;
+    --border: #1e2535;
+    --muted: #8b93a5;
+    --fg: #e8eaf0;
+    --fg2: #c3c8d4;
+    --blue: #3b82f6;
+    --green: #22c55e;
+    --red: #ef4444;
+    --amber: #f59e0b;
+    --purple: #8b5cf6;
+  }
+  body { background: var(--bg); color: var(--fg); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 14px; min-height: 100vh; }
+
+  /* TopBar */
+  .topbar { height: 52px; border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 24px; gap: 32px; background: var(--card); }
+  .topbar .logo { font-weight: 700; font-size: 16px; color: var(--fg); letter-spacing: -0.5px; }
+  .topbar nav { display: flex; gap: 4px; }
+  .topbar nav a { padding: 5px 12px; border-radius: 8px; color: var(--muted); font-size: 13px; text-decoration: none; transition: background 0.15s; }
+  .topbar nav a:hover { background: rgba(255,255,255,0.05); color: var(--fg); }
+  .topbar nav a.active { background: rgba(59,130,246,0.15); color: var(--blue); }
+
+  /* Main */
+  main { max-width: 1000px; margin: 0 auto; padding: 32px 24px; display: flex; flex-direction: column; gap: 28px; }
+
+  /* Breadcrumb */
+  .breadcrumb { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+  .breadcrumb a { color: var(--blue); text-decoration: none; }
+  .breadcrumb a:hover { text-decoration: underline; }
+  .breadcrumb span { color: var(--muted); }
+
+  /* Page header */
+  .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .page-header-left { display: flex; align-items: center; gap: 14px; }
+  .agent-icon { width: 48px; height: 48px; border-radius: 14px; background: #ef4444; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+  .agent-title h1 { font-size: 20px; font-weight: 700; color: var(--fg); }
+  .agent-title p { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .header-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+
+  /* Badges */
+  .badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; }
+  .badge.active { background: rgba(34,197,94,0.12); color: #4ade80; }
+  .badge.paused { background: rgba(245,158,11,0.12); color: #fbbf24; }
+  .badge.failed { background: rgba(239,68,68,0.12); color: #f87171; }
+  .badge.running { background: rgba(59,130,246,0.12); color: #60a5fa; }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 8px; font-size: 13px; font-weight: 500; border: none; cursor: pointer; transition: opacity 0.15s; }
+  .btn:hover { opacity: 0.85; }
+  .btn-primary { background: var(--blue); color: #fff; }
+  .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--fg2); }
+
+  /* KPI row */
+  .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .kpi-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; }
+  .kpi-card .kpi-value { font-size: 24px; font-weight: 700; color: var(--fg); line-height: 1; }
+  .kpi-card .kpi-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .kpi-card .kpi-sub { font-size: 12px; color: var(--green); margin-top: 6px; }
+  .kpi-card .kpi-sub.warn { color: var(--amber); }
+
+  /* Chart card */
+  .chart-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 20px 24px; }
+  .chart-card h2 { font-size: 14px; font-weight: 600; color: var(--fg); margin-bottom: 16px; }
+  .chart-wrap { position: relative; }
+  .chart-legend { display: flex; gap: 16px; margin-top: 12px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .legend-dot { width: 8px; height: 8px; border-radius: 2px; }
+
+  /* Run list */
+  .run-list-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+  .run-list-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+  .run-list-header h2 { font-size: 14px; font-weight: 600; color: var(--fg); }
+  .run-list-header span { font-size: 12px; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { padding: 10px 20px; text-align: left; font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.02); }
+  tbody tr { border-bottom: 1px solid rgba(30,37,53,0.6); transition: background 0.1s; cursor: pointer; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,0.03); }
+  tbody td { padding: 11px 20px; font-size: 13px; color: var(--fg2); vertical-align: middle; }
+  .run-time { color: var(--muted); font-size: 12px; }
+  .intent-pill { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 6px; background: rgba(139,92,246,0.12); color: #a78bfa; font-size: 11px; font-weight: 500; }
+  .anomaly-score { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+  .anomaly-score.ok { color: var(--green); }
+  .anomaly-score.warn { color: var(--amber); }
+  .anomaly-score.bad { color: var(--red); }
+  .summary-snippet { color: var(--muted); font-size: 12px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Expanded row */
+  .expanded-row td { background: rgba(59,130,246,0.04); border-left: 2px solid var(--blue); padding: 14px 20px; }
+  .expanded-content { font-size: 13px; color: var(--fg2); line-height: 1.6; white-space: pre-wrap; }
+
+  /* Pending approvals */
+  .approvals-card { background: var(--card); border: 1px solid var(--amber); border-radius: 16px; overflow: hidden; }
+  .approvals-header { display: flex; align-items: center; gap: 8px; padding: 14px 20px; border-bottom: 1px solid rgba(245,158,11,0.2); }
+  .approvals-header h2 { font-size: 14px; font-weight: 600; color: var(--fg); }
+  .approvals-header .count { background: rgba(245,158,11,0.15); color: var(--amber); font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+  .approval-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-bottom: 1px solid rgba(30,37,53,0.6); }
+  .approval-item:last-child { border-bottom: none; }
+  .approval-desc { font-size: 13px; color: var(--fg2); }
+  .approval-time { font-size: 12px; color: var(--muted); }
+  .approval-actions { display: flex; gap: 6px; }
+  .btn-approve { padding: 4px 12px; font-size: 12px; background: rgba(34,197,94,0.15); color: #4ade80; border: 1px solid rgba(34,197,94,0.25); border-radius: 6px; cursor: pointer; }
+  .btn-deny { padding: 4px 12px; font-size: 12px; background: rgba(239,68,68,0.1); color: #f87171; border: 1px solid rgba(239,68,68,0.2); border-radius: 6px; cursor: pointer; }
+
+  @media (max-width: 700px) {
+    .kpi-row { grid-template-columns: repeat(2, 1fr); }
+    .page-header { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<!-- TopBar -->
+<div class="topbar">
+  <span class="logo">ByteOps</span>
+  <nav>
+    <a href="#">Chat</a>
+    <a href="#">Runs</a>
+    <a href="#" class="active">Agents</a>
+    <a href="#">Analytics</a>
+  </nav>
+</div>
+
+<main>
+
+  <!-- Breadcrumb -->
+  <div class="breadcrumb">
+    <a href="#">← Agents</a>
+    <span>/</span>
+    <span>Inbox Triage Agent</span>
+  </div>
+
+  <!-- Page header -->
+  <div class="page-header">
+    <div class="page-header-left">
+      <div class="agent-icon">✉️</div>
+      <div class="agent-title">
+        <h1>My Inbox Triage <span class="badge active" style="font-size:12px;margin-left:6px;">Active</span></h1>
+        <p>Inbox Triage Agent · Every 2 hours</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-primary">▶ Run Now</button>
+      <button class="btn btn-ghost">⏸ Pause</button>
+    </div>
+  </div>
+
+  <!-- KPI row -->
+  <div class="kpi-row">
+    <div class="kpi-card">
+      <div class="kpi-value">47</div>
+      <div class="kpi-label">Total Runs</div>
+      <div class="kpi-sub">↑ 8 this week</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-value">91%</div>
+      <div class="kpi-label">Success Rate</div>
+      <div class="kpi-sub">43 / 47 completed</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-value" style="font-size:18px;">2h ago</div>
+      <div class="kpi-label">Last Run</div>
+      <div class="kpi-sub">Completed · 12s</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-value" style="font-size:18px;">in 58m</div>
+      <div class="kpi-label">Next Run</div>
+      <div class="kpi-sub warn">⚠ Token expires in 3d</div>
+    </div>
+  </div>
+
+  <!-- Pending Approvals (shown when count > 0) -->
+  <div class="approvals-card">
+    <div class="approvals-header">
+      <h2>Pending Approvals</h2>
+      <span class="count">2 waiting</span>
+    </div>
+    <div class="approval-item">
+      <div>
+        <div class="approval-desc">Send reply to <strong>alex@example.com</strong> — "Re: Q3 Budget Review"</div>
+        <div class="approval-time">Requested 2h ago · Run #47</div>
+      </div>
+      <div class="approval-actions">
+        <button class="btn-approve">Approve</button>
+        <button class="btn-deny">Deny</button>
+      </div>
+    </div>
+    <div class="approval-item">
+      <div>
+        <div class="approval-desc">Forward thread to <strong>team@example.com</strong> — "Urgent: Server outage"</div>
+        <div class="approval-time">Requested 2h ago · Run #47</div>
+      </div>
+      <div class="approval-actions">
+        <button class="btn-approve">Approve</button>
+        <button class="btn-deny">Deny</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Run history chart -->
+  <div class="chart-card">
+    <h2>Runs — Last 30 Days</h2>
+    <div class="chart-wrap">
+      <svg width="100%" height="120" viewBox="0 0 900 120" preserveAspectRatio="none">
+        <!-- Y axis guides -->
+        <line x1="0" y1="20" x2="900" y2="20" stroke="#1e2535" stroke-width="1"/>
+        <line x1="0" y1="60" x2="900" y2="60" stroke="#1e2535" stroke-width="1"/>
+        <line x1="0" y1="100" x2="900" y2="100" stroke="#1e2535" stroke-width="1"/>
+        <!-- Bars: 30 days, alternating green/red to show pattern -->
+        <!-- Each bar is ~28px wide with 2px gap -->
+        <rect x="0"   y="60" width="24" height="40" rx="3" fill="#22c55e" opacity="0.7"/>
+        <rect x="30"  y="70" width="24" height="30" rx="3" fill="#22c55e" opacity="0.7"/>
+        <rect x="60"  y="55" width="24" height="45" rx="3" fill="#22c55e" opacity="0.7"/>
+        <rect x="90"  y="80" width="24" height="20" rx="3" fill="#ef4444" opacity="0.7"/>
+        <rect x="120" y="65" width="24" height="35" rx="3" fill="#22c55e" opacity="0.7"/>
+        <rect x="150" y="60" width="24" height="40" rx="3" fill="#22c55e" opacity="0.7"/>
+        <rect x="180" y="50" width="24" height="50" rx="3" fill="#22c55e" opacity="0.7"/>
+        <rect x="210" y="75" width="24" height="25" rx="3" fill="#22c55e" opacity="0.7"/>
+        <rect x="240" y="85" width="24" height="15" rx="3" fill="#ef4444" opacity="0.7"/>
+        <rect x="270" y="100" width="24" height="0" rx="3" fill="#1e2535" opacity="0.4"/>
+        <rect x="300" y="55" width="24" height="45" rx="3" fill="#22c55e" opacity="0.7"/>
+        <rect x="330" y="60" width="24" height="40" rx="3" fill="#22c55e" opacity="0.7"/>
+        <rect x="360" y="70" width="24" height="30" rx="3" fill="#22c55e" opacity="0.7"/>
+        <rect x="390" y="65" width="24" height="35" rx="3" fill="#22c55e" opacity="0.7"/>
+        <rect x="420" y="90" width="24" height="10" rx="3" fill="#ef4444" opacity="0.7"/>
+        <rect x="450" y="50" width="24" height="50" rx="3" fill="#22c55e" opacity="0.7"/>
+        <rect x="480" y="45" width="24" height="55" rx="3" fill="#22c55e" opacity="0.7"/>
+        <rect x="510" y="60" width="24" height="40" rx="3" fill="#22c55e" opacity="0.7"/>
+        <rect x="540" y="70" width="24" height="30" rx="3" fill="#22c55e" opacity="0.7"/>
+        <rect x="570" y="65" width="24" height="35" rx="3" fill="#22c55e" opacity="0.7"/>
+        <rect x="600" y="55" width="24" height="45" rx="3" fill="#22c55e" opacity="0.7"/>
+        <rect x="630" y="80" width="24" height="20" rx="3" fill="#ef4444" opacity="0.7"/>
+        <rect x="660" y="60" width="24" height="40" rx="3" fill="#22c55e" opacity="0.7"/>
+        <rect x="690" y="50" width="24" height="50" rx="3" fill="#22c55e" opacity="0.7"/>
+        <rect x="720" y="70" width="24" height="30" rx="3" fill="#22c55e" opacity="0.7"/>
+        <rect x="750" y="65" width="24" height="35" rx="3" fill="#22c55e" opacity="0.7"/>
+        <rect x="780" y="55" width="24" height="45" rx="3" fill="#22c55e" opacity="0.7"/>
+        <rect x="810" y="40" width="24" height="60" rx="3" fill="#22c55e" opacity="0.7"/>
+        <rect x="840" y="35" width="24" height="65" rx="3" fill="#22c55e" opacity="0.7"/>
+        <rect x="870" y="45" width="24" height="55" rx="3" fill="#22c55e" opacity="0.85" stroke="#3b82f6" stroke-width="1.5"/>
+        <!-- Today label -->
+        <text x="870" y="115" fill="#8b93a5" font-size="9" text-anchor="middle" font-family="sans-serif">today</text>
+      </svg>
+    </div>
+    <div class="chart-legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div> Success</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div> Failed</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#1e2535; border:1px solid #2e3a52"></div> No run</div>
+    </div>
+  </div>
+
+  <!-- Run history list -->
+  <div class="run-list-card">
+    <div class="run-list-header">
+      <h2>Run History</h2>
+      <span>Last 50 runs · click a row to expand</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Status</th>
+          <th>Intent</th>
+          <th>Anomaly</th>
+          <th>Summary</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="run-time">Today 14:02</span></td>
+          <td><span class="badge active">Completed</span></td>
+          <td><span class="intent-pill">gmail</span></td>
+          <td><span class="anomaly-score ok">● 0.04</span></td>
+          <td><span class="summary-snippet">Processed 18 emails, 3 high priority, 2 drafts created</span></td>
+        </tr>
+        <!-- Expanded row example -->
+        <tr class="expanded-row">
+          <td colspan="5">
+            <div class="expanded-content">Processed 18 unread emails. Classified: 3 HIGH (budget review, server outage, client escalation), 8 MEDIUM, 7 LOW. Created 2 draft replies. Suggested label: "Priority/High" applied to 3 threads. Key action: Reply to Alex re Q3 Budget — awaiting approval.</div>
+          </td>
+        </tr>
+        <tr>
+          <td><span class="run-time">Today 12:01</span></td>
+          <td><span class="badge active">Completed</span></td>
+          <td><span class="intent-pill">gmail</span></td>
+          <td><span class="anomaly-score ok">● 0.07</span></td>
+          <td><span class="summary-snippet">Processed 12 emails, 1 high priority, 1 draft created</span></td>
+        </tr>
+        <tr>
+          <td><span class="run-time">Today 10:00</span></td>
+          <td><span class="badge failed">Failed</span></td>
+          <td><span class="intent-pill">gmail</span></td>
+          <td><span class="anomaly-score bad">● 0.81</span></td>
+          <td><span class="summary-snippet">OAuth token refresh failed — auto-paused</span></td>
+        </tr>
+        <tr>
+          <td><span class="run-time">Yesterday 18:00</span></td>
+          <td><span class="badge active">Completed</span></td>
+          <td><span class="intent-pill">gmail</span></td>
+          <td><span class="anomaly-score ok">● 0.03</span></td>
+          <td><span class="summary-snippet">Processed 22 emails, 0 high priority</span></td>
+        </tr>
+        <tr>
+          <td><span class="run-time">Yesterday 16:00</span></td>
+          <td><span class="badge active">Completed</span></td>
+          <td><span class="intent-pill">gmail</span></td>
+          <td><span class="anomaly-score warn">● 0.42</span></td>
+          <td><span class="summary-snippet">Unusual forwarding pattern detected — flagged for review</span></td>
+        </tr>
+        <tr>
+          <td><span class="run-time">Yesterday 14:00</span></td>
+          <td><span class="badge active">Completed</span></td>
+          <td><span class="intent-pill">gmail</span></td>
+          <td><span class="anomaly-score ok">● 0.06</span></td>
+          <td><span class="summary-snippet">Processed 9 emails, 2 high priority</span></td>
+        </tr>
+        <tr>
+          <td><span class="run-time">Jun 20 · 16:01</span></td>
+          <td><span class="badge active">Completed</span></td>
+          <td><span class="intent-pill">gmail</span></td>
+          <td><span class="anomaly-score ok">● 0.05</span></td>
+          <td><span class="summary-snippet">Processed 14 emails, 1 high priority, 1 draft created</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</main>
+</body>
+</html>
