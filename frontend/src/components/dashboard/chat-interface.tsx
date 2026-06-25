@@ -7,6 +7,7 @@ import { useAuth } from "@clerk/nextjs";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 import { useConversations, ConversationMessage } from "@/hooks/use-conversations";
+import { useRotatingLabel } from "@/hooks/useRotatingLabel";
 import { ByteOpsLogoMark } from "@/lib/brand-icons";
 
 import { api } from "@/lib/api";
@@ -589,7 +590,8 @@ export function ChatInterface({
     const [isTyping, setIsTyping] = useState(false);
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
     const [stageContext, setStageContext] = useState("understanding");
-    const [stageVariantIdx, setStageVariantIdx] = useState(0);
+    const stagePool = ROTATING_LABELS[stageContext] ?? ROTATING_LABELS.understanding;
+    const [stageVariantIdx, resetStageVariantIdx] = useRotatingLabel(isTyping, stagePool.length);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -616,16 +618,6 @@ export function ChatInterface({
     useEffect(() => {
         scrollToBottom(isTyping);
     }, [messages, isTyping, scrollToBottom]);
-
-    // Rotate stage label every 1.8s while the agent is thinking
-    useEffect(() => {
-        if (!isTyping) { setStageVariantIdx(0); return; }
-        const pool = ROTATING_LABELS[stageContext] ?? ROTATING_LABELS.understanding;
-        const id = setInterval(() => {
-            setStageVariantIdx(i => (i + 1) % pool.length);
-        }, 1800);
-        return () => clearInterval(id);
-    }, [isTyping, stageContext]);
 
     // ── Ask AI bridge: auto-send message from workflow/notification panel ────────
     useEffect(() => {
@@ -693,7 +685,7 @@ export function ChatInterface({
         setAttachedFile(null);
         setIsTyping(true);
         setStageContext("understanding");
-        setStageVariantIdx(0);
+        resetStageVariantIdx();
         let chatTimeoutId: number | null = null;
 
         const userMessage: Message = {
@@ -836,7 +828,7 @@ export function ChatInterface({
                                     } else if (event.type === "tool_call_start") {
                                         const toolCtx = event.tool?.split(":")?.[0] ?? "routing";
                                         setStageContext(ROTATING_LABELS[toolCtx] ? toolCtx : "routing");
-                                        setStageVariantIdx(0);
+                                        resetStageVariantIdx();
                                         newStage = "active";
                                         newToolCalls.push({
                                             tool: event.tool,
@@ -852,7 +844,7 @@ export function ChatInterface({
                                         }
                                     } else if (event.type === "approval_required") {
                                         setStageContext("awaiting");
-                                        setStageVariantIdx(0);
+                                        resetStageVariantIdx();
                                         newStage = "active";
                                     } else if (event.type === "workflow_draft") {
                                         newContent = workflowDraftAssistantContent(event);
