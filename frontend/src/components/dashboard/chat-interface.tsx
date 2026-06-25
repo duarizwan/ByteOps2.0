@@ -868,7 +868,7 @@ export function ChatInterface({
                                 })
                             );
                         } catch (e) {
-                            console.error("Failed to parse SSE JSON:", e, dataStr);
+                            console.warn("Failed to parse SSE JSON:", e, dataStr);
                         }
                     }
                 }
@@ -886,8 +886,10 @@ export function ChatInterface({
                 );
             }
         } catch (error) {
-            console.error("Chat error:", error);
             const isAbortError = error instanceof Error && error.name === "AbortError";
+            if (!isAbortError) {
+                console.error("Chat error:", error);
+            }
             setMessages((prev) =>
                 prev.map((msg) =>
                     msg.id === assistantMessageId
