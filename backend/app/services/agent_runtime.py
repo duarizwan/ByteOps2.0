@@ -2,10 +2,13 @@
 
 import asyncio
 import json
+import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from app.models.agent_run import AgentRun, AgentRunStatus, AgentRunStep, AgentRunStepType
 from app.anomaly.scorer import AnomalyScorer
@@ -47,7 +50,8 @@ async def apply_llm_monitoring(run, steps: list[dict]) -> None:
         run.llm_reasoning = result["reasoning"]
         if result["flagged"]:
             run.flagged = True
-    except Exception:  # noqa: BLE001 - never break a run
+    except Exception as e:  # noqa: BLE001 - never break a run
+        logger.warning("LLM monitoring failed for run: %s", e, exc_info=True)
         return
 
 
@@ -69,7 +73,8 @@ def apply_anomaly_scoring(run, steps: list[dict]) -> None:
         # the attention scorer also returns a human-readable reason
         if result.get("reasoning") and hasattr(run, "llm_reasoning") and not getattr(run, "llm_reasoning", None):
             run.llm_reasoning = result["reasoning"]
-    except Exception:  # noqa: BLE001 - scoring must never break a run
+    except Exception as e:  # noqa: BLE001 - scoring must never break a run
+        logger.warning("Anomaly scoring failed for run: %s", e, exc_info=True)
         return
 
 
@@ -194,7 +199,8 @@ async def complete_agent_run(db: AsyncSession, run: AgentRun, final_response: st
         apply_anomaly_scoring(run, steps)
         await db.commit()
         await db.refresh(run)
-    except Exception:  # noqa: BLE001 - scoring is best-effort
+    except Exception as e:  # noqa: BLE001 - scoring is best-effort
+        logger.warning("Post-completion scoring failed — rolled back: %s", e, exc_info=True)
         await db.rollback()
     return run
 
@@ -226,7 +232,8 @@ async def score_run_llm_background(run_id) -> None:
             ]
             await apply_llm_monitoring(run, steps)
             await db.commit()
-    except Exception:  # noqa: BLE001 - background scoring must never surface
+    except Exception as e:  # noqa: BLE001 - background scoring must never surface
+        logger.warning("Background LLM scoring failed: %s", e, exc_info=True)
         return
 
 
