@@ -50,7 +50,7 @@ class LLMResponse:
     content: list[TextBlock | ToolUseBlock]
     stop_reason: str
     # Provider-native assistant message dict — used by append_response()
-    _native: dict = field(default_factory=dict, repr=False)
+    _native: dict[str, Any] = field(default_factory=dict, repr=False)
 
 
 class LLMClient:
@@ -158,7 +158,7 @@ class LLMClient:
     # ── Anthropic backend ──────────────────────────────────────────────────────
 
     async def _ant_create(
-        self, messages, system, max_tokens, tools, model
+        self, messages: list[dict[str, Any]], system: str, max_tokens: int, tools: list[dict[str, Any]] | None, model: str
     ) -> LLMResponse:
         kwargs: dict[str, Any] = dict(model=model, max_tokens=max_tokens, messages=messages)
         if system:
@@ -181,7 +181,7 @@ class LLMClient:
         )
 
     async def _ant_stream(
-        self, messages, system, max_tokens, model
+        self, messages: list[dict[str, Any]], system: str, max_tokens: int, model: str
     ) -> AsyncIterator[str]:
         kwargs: dict[str, Any] = dict(model=model, max_tokens=max_tokens, messages=messages)
         if system:
@@ -236,7 +236,7 @@ class LLMClient:
         ]
 
     async def _oai_create(
-        self, messages, system, max_tokens, tools, model
+        self, messages: list[dict[str, Any]], system: str, max_tokens: int, tools: list[dict[str, Any]] | None, model: str
     ) -> LLMResponse:
         kwargs: dict[str, Any] = dict(
             model=model,
@@ -279,7 +279,7 @@ class LLMClient:
         )
 
     async def _oai_stream(
-        self, messages, system, max_tokens, model
+        self, messages: list[dict[str, Any]], system: str, max_tokens: int, model: str
     ) -> AsyncIterator[str]:
         stream = await self._client.chat.completions.create(
             model=model,
