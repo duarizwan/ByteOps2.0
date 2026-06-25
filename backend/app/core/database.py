@@ -44,8 +44,8 @@ def _create_engine():
         db_url,
         echo=settings.debug,
         pool_pre_ping=True,
-        pool_size=10,       # Increased from 5 for better concurrency under load
-        max_overflow=20,    # Increased from 10 — allows bursts without connection errors
+        pool_size=20,       # Increased from 10 for high concurrent SSE load
+        max_overflow=40,    # Increased from 20 — handles approval-gate connection bursts
         pool_recycle=3600,  # Recycle connections every hour; prevents stale connections on cloud/Railway
         connect_args=connect_args,
     )

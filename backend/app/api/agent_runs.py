@@ -3,7 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,6 +34,7 @@ def _latest_workflow_draft(run: AgentRun) -> dict | None:
 
 @router.get("")
 async def list_agent_runs(
+    response: Response,
     current_user: Annotated[User, Depends(get_current_clerk_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[dict]:
@@ -44,6 +45,7 @@ async def list_agent_runs(
         .order_by(AgentRun.created_at.desc())
         .limit(50)
     )
+    response.headers["Cache-Control"] = "private, max-age=30"
     return [serialize_agent_run(run) for run in result.scalars().all()]
 
 

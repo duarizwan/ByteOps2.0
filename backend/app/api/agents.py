@@ -21,7 +21,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -347,6 +347,7 @@ async def _get_recent_runs(db: AsyncSession, user_id, agent_name: str, limit: in
 
 @router.get("/templates", response_model=list[TemplateOut])
 async def list_templates(
+    response: Response,
     current_user: Annotated[User, Depends(get_current_clerk_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[TemplateOut]:
@@ -377,11 +378,13 @@ async def list_templates(
             capabilities=tmpl["capabilities"],
             available=available,
         ))
+    response.headers["Cache-Control"] = "private, max-age=30"
     return templates
 
 
 @router.get("", response_model=list[HiredAgentOut])
 async def list_agents(
+    response: Response,
     current_user: Annotated[User, Depends(get_current_clerk_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[HiredAgentOut]:
@@ -392,6 +395,7 @@ async def list_agents(
         .order_by(HiredAgent.created_at.desc())
     )
     agents = result.scalars().all()
+    response.headers["Cache-Control"] = "private, max-age=30"
     return [_serialize(agent) for agent in agents]
 
 
@@ -591,6 +595,7 @@ async def fire_agent(
 @router.get("/{agent_id}/runs", response_model=list[AgentRunOut])
 async def list_agent_runs(
     agent_id: UUID,
+    response: Response,
     current_user: Annotated[User, Depends(get_current_clerk_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
     limit: int = 50,
@@ -607,6 +612,7 @@ async def list_agent_runs(
         .offset(offset)
     )
     runs = result.scalars().all()
+    response.headers["Cache-Control"] = "private, max-age=30"
     return [
         AgentRunOut(
             id=str(r.id),
