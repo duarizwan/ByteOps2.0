@@ -14,10 +14,6 @@ const BADGE: Record<string, { bg: string; text: string; label: string }> = {
     dropbox:  { bg: "rgba(14,165,233,.12)",  text: "#38BDF8", label: "Dropbox"  },
 };
 
-function capitalize(s: string): string {
-    return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
 interface NeedsFixingCardProps {
     run: AgentRun;
 }

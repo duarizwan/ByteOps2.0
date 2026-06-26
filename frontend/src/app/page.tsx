@@ -149,6 +149,74 @@ export default async function HomePage() {
                 </div>
 
                 {/* ── Feature Cards ── */}
+                <section
+                    aria-label="Dashboard preview"
+                    className="anim-fade-up anim-delay-5 w-full max-w-4xl mx-auto mb-16 text-left"
+                >
+                    <div
+                        className="rounded-2xl overflow-hidden border"
+                        style={{
+                            background: "rgba(15,23,42,0.82)",
+                            borderColor: "rgba(148,163,184,0.18)",
+                            boxShadow: "0 24px 80px rgba(15,23,42,0.55)",
+                        }}
+                    >
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.07]">
+                            <div className="flex items-center gap-2">
+                                <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
+                                <div className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
+                                <div className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
+                            </div>
+                            <span className="text-[11px] font-medium" style={{ color: "#94a3b8" }}>
+                                Dashboard preview
+                            </span>
+                        </div>
+                        <div className="grid md:grid-cols-[1fr_280px]">
+                            <div className="p-5">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-blue-500/15">
+                                        <Workflow className="w-4 h-4 text-blue-300" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-semibold text-white">Morning workflow</p>
+                                        <p className="text-xs" style={{ color: "#64748b" }}>
+                                            Gmail, Slack, and calendar summary
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    {["Read Gmail updates", "Find urgent Slack mentions", "Prepare task list"].map((item) => (
+                                        <div
+                                            key={item}
+                                            className="flex items-center justify-between rounded-lg px-3 py-2"
+                                            style={{ background: "rgba(255,255,255,0.04)" }}
+                                        >
+                                            <span className="text-xs text-slate-200">{item}</span>
+                                            <span className="text-[10px] text-emerald-300">Ready</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="border-t md:border-t-0 md:border-l border-white/[0.07] p-5">
+                                <p className="text-xs font-semibold text-white mb-3">Workflow trace</p>
+                                <div className="space-y-3">
+                                    {["User request", "Plan", "Approval gate", "Response"].map((step, index) => (
+                                        <div key={step} className="flex items-center gap-2">
+                                            <div
+                                                className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] text-white"
+                                                style={{ background: index === 2 ? "#eab308" : "#2563eb" }}
+                                            >
+                                                {index + 1}
+                                            </div>
+                                            <span className="text-xs" style={{ color: "#cbd5e1" }}>{step}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
                 <div className="anim-fade-up anim-delay-5 grid grid-cols-1 md:grid-cols-3 gap-5 max-w-4xl mx-auto w-full">
                     {CARDS.map(({ num, Icon, rgb, title, body }) => (
                         <div

@@ -8,6 +8,7 @@ from sqlalchemy import String, DateTime, ForeignKey, func, Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.crypto import EncryptedString
 from app.core.database import Base
 
 
@@ -40,8 +41,8 @@ class ToolConnection(Base):
     tool_type: Mapped[ToolType] = mapped_column(
         SAEnum(ToolType, name="tool_type_enum"), nullable=False
     )
-    access_token: Mapped[str] = mapped_column(String(4096), nullable=False)
-    refresh_token: Mapped[str | None] = mapped_column(String(4096), nullable=True)
+    access_token: Mapped[str] = mapped_column(EncryptedString, nullable=False)
+    refresh_token: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
     token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     scopes: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     status: Mapped[ConnectionStatus] = mapped_column(

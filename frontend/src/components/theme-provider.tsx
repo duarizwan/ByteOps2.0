@@ -22,11 +22,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
     // Hydrate from localStorage and matchMedia after mount — never during SSR
     useEffect(() => {
-        const stored = localStorage.getItem("byteops-theme") as Theme | null;
-        const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-        setSystemTheme(prefersDark ? "dark" : "light");
-        if (stored) setTheme(stored);
-        setMounted(true);
+        queueMicrotask(() => {
+            const stored = localStorage.getItem("byteops-theme") as Theme | null;
+            const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+            setSystemTheme(prefersDark ? "dark" : "light");
+            if (stored) setTheme(stored);
+            setMounted(true);
+        });
     }, []);
 
     useEffect(() => {

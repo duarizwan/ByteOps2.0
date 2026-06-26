@@ -12,8 +12,6 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "ByteOps — AI-Powered Productivity Platform",
-  description:
-    "Consolidate your business tools with an intelligent AI assistant. Connect Gmail, Slack, JIRA, GitHub, and more.",
   icons: {
     icon: "/favicon.svg",
   },
@@ -28,6 +26,7 @@ export default function RootLayout({
     <ClerkProvider
       signInFallbackRedirectUrl="/dashboard"
       signUpFallbackRedirectUrl="/dashboard"
+      clerkJSVersion="5.125.13"
     >
       <html lang="en" suppressHydrationWarning>
         <body className={`${inter.variable} font-sans antialiased`}>

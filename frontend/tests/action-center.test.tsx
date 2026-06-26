@@ -69,4 +69,13 @@ describe("ActionCenter", () => {
         expect(screen.getByTestId("graph-canvas")).toHaveAttribute("data-run-id", "run-from-query");
         expect(screen.getByRole("button", { name: /back to execution trace/i })).toBeInTheDocument();
     });
+
+    it("lists workflow traces that are directly openable by trace URL", () => {
+        navigationState.trace = null;
+
+        render(<ActionCenter />);
+
+        expect(screen.getByText("Workflow completed.")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /view trace/i })).toBeInTheDocument();
+    });
 });

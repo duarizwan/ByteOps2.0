@@ -136,7 +136,7 @@ async function connectViaApiKey(
         body: JSON.stringify({ credentials }),
     });
     if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: (res as any).statusText }));
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
         throw new Error(err.detail ?? `Failed to connect ${tool}`);
     }
     await fetchConnections();

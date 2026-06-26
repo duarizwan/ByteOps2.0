@@ -33,6 +33,12 @@ export interface AgentRun {
     final_response: string | null;
     error: string | null;
     metadata?: Record<string, unknown> | null;
+    anomaly_score?: number | null;
+    step_scores?: Record<string, number> | null;
+    flagged?: boolean;
+    data_label?: string;
+    llm_score?: number | null;
+    llm_reasoning?: string | null;
     created_at: string;
     updated_at: string;
     completed_at: string | null;

@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -220,6 +220,7 @@ async def _get_user_workflow(
 
 @router.get("", response_model=list[WorkflowOut])
 async def list_workflows(
+    response: Response,
     current_user: Annotated[User, Depends(get_current_clerk_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[WorkflowOut]:
@@ -228,6 +229,7 @@ async def list_workflows(
         .where(Workflow.user_id == current_user.id)
         .order_by(Workflow.updated_at.desc(), Workflow.created_at.desc())
     )
+    response.headers["Cache-Control"] = "private, max-age=30"
     return [_serialize(workflow) for workflow in result.scalars().all()]
 
 

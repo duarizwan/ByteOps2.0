@@ -25,3 +25,14 @@ __pycache__/
 # ML experiment tracking + exported training data
 mlruns/
 backend/data/
+
+# Nested standalone project (its own git repo)
+agentsop/
+
+# MLflow sqlite backend
+backend/mlflow.db
+mlflow.db
+
+# Generated report artifacts
+backend/outputs/
+outputs/

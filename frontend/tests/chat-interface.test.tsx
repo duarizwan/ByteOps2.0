@@ -55,6 +55,15 @@ describe("ChatInterface — implementation checks", () => {
         expect(source).toContain('textareaRef.current.style.height = "auto"');
     });
 
+    it("does not render unfinished chat controls", () => {
+        expect(source).not.toContain("<Mic");
+        expect(source).not.toContain("View full");
+    });
+
+    it("labels the send button for assistive technology", () => {
+        expect(source).toContain('aria-label="Send message"');
+    });
+
     it("defines workflow draft approval state and card", () => {
         expect(source).toContain("interface WorkflowDraft");
         expect(source).toContain("WorkflowDraftCard");
@@ -112,13 +121,19 @@ describe("ChatInterface — implementation checks", () => {
     });
 
     it("does not clear email send approval unless the approve request succeeds", () => {
-        const approveStart = source.indexOf("const handleApprove = async () =>");
+        const approveStart = source.indexOf("const handleApprove = useCallback(async");
         const approveEnd = source.indexOf("const handleReject = async () =>");
         const approveSource = source.slice(approveStart, approveEnd);
 
         expect(approveSource).toContain("const response = await fetch");
         expect(approveSource).toContain("if (!response.ok)");
         expect(approveSource).toContain("setPendingApproval(null)");
+    });
+
+    it("does not let click events become approval overrides", () => {
+        expect(source).toContain("const approveCurrent = useCallback");
+        expect(source).toContain("onApprove={approveCurrent}");
+        expect(source).not.toContain("onApprove={handleApprove}");
     });
 
     it("renders editable workflow draft controls", () => {

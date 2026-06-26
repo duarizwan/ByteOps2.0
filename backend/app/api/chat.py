@@ -19,7 +19,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
@@ -46,6 +46,7 @@ from app.services.agent_runtime import (
     create_agent_run,
     fail_agent_run,
     record_agent_step,
+    schedule_llm_monitoring,
 )
 from app.services.workflow_creation import (
     build_workflow_draft,
@@ -179,6 +180,17 @@ def _build_activity_notification_payload(
     is_high = any(cue in text for cue in _HIGH_PRIORITY_CUES)
     priority = "high" if is_high else "medium"
 
+    # Categorize deliberately. Routine agent activity is just "activity" (a quiet
+    # history item) — NOT an alert. Only genuine signal escalates to "alert", and
+    # actionable items become "task". This prevents the alerts feed from drowning
+    # in normal tool interactions.
+    if is_task:
+        category = "task"
+    elif is_high:
+        category = "alert"
+    else:
+        category = "activity"
+
     return {
         "source_tool": source_tool,
         "title": title,
@@ -186,7 +198,7 @@ def _build_activity_notification_payload(
         "priority": priority,
         "metadata": {
             "from_chat": True,
-            "category": "task" if is_task else "alert",
+            "category": category,
             "action_required": is_task,
             "attention_title": title,
             "extracted_priority": priority,
@@ -228,7 +240,7 @@ async def _save_activity_notification(
 
 
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(min_length=1, max_length=10_000)
     conversation_id: UUID | None = None
 
 
@@ -443,6 +455,10 @@ async def _run_chat(
         await complete_agent_run(db, agent_run, full_text)
 
         await queue.put(("done", full_text, str(conv.id)))
+
+        # LLM monitoring runs AFTER 'done' (fire-and-forget, own DB session) so
+        # it never delays the user's response.
+        schedule_llm_monitoring(agent_run.id)
 
     except Exception as exc:  # noqa: BLE001
         msg = str(exc)

@@ -1,0 +1,62 @@
+{
+  "model": "bilstm_attn",
+  "tokenizer": "v2",
+  "max_len": 20,
+  "threshold": 0.5,
+  "vocabs": {
+    "step_type": {
+      "<PAD>": 0,
+      "<UNK>": 1,
+      "plan": 2,
+      "route": 3,
+      "tool_call": 4,
+      "final": 5
+    },
+    "tool_name": {
+      "<PAD>": 0,
+      "<UNK>": 1,
+      "none": 2,
+      "gmail": 3,
+      "slack": 4,
+      "jira": 5,
+      "dropbox": 6,
+      "github": 7,
+      "calendar": 8
+    },
+    "action_category": {
+      "<PAD>": 0,
+      "<UNK>": 1,
+      "none": 2,
+      "external": 3,
+      "send": 4,
+      "read": 5,
+      "destructive": 6
+    }
+  },
+  "numeric_features": [
+    "risk_level",
+    "status_ok",
+    "approval_required",
+    "approval_rejected",
+    "is_external_domain",
+    "is_sensitive_data_action",
+    "is_cross_tool_action",
+    "position_frac",
+    "run_length_norm",
+    "intent_mismatch",
+    "intent_authorizes_risky"
+  ],
+  "metrics": {
+    "accuracy": 0.9534883720930233,
+    "precision": 1.0,
+    "recall": 0.8,
+    "f1": 0.888888888888889,
+    "tp": 8,
+    "fp": 0,
+    "fn": 2,
+    "tn": 33,
+    "pauroc": 0.9696969706000704,
+    "auroc": 0.9939393941200141
+  },
+  "emits_attention": true
+}

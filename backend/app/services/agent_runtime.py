@@ -2,12 +2,80 @@
 
 import asyncio
 import json
+import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+logger = logging.getLogger(__name__)
+
 from app.models.agent_run import AgentRun, AgentRunStatus, AgentRunStep, AgentRunStepType
+from app.anomaly.scorer import AnomalyScorer
+from app.anomaly.attention_scorer import AttentionScorer
+from app.anomaly.llm_monitor import score_run_llm
+from app.services.agent_policy import classify_tool_call
+
+_scorer = AnomalyScorer()
+_attn_scorer = AttentionScorer()
+
+_RISKY_RISKS = {"write", "external_send", "destructive"}
+
+
+def has_risky_step(steps: list[dict]) -> bool:
+    for s in steps:
+        # A risky tool actually ran...
+        if s.get("step_type") == "tool_call":
+            if classify_tool_call("", str(s.get("name", ""))).risk.value in _RISKY_RISKS:
+                return True
+        # ...or a risky action hit the approval gate (approved OR rejected) — reaching
+        # the gate at all means the agent attempted something sensitive, which is
+        # exactly what the monitor should review and explain.
+        if s.get("step_type") == "approval":
+            return True
+        if str(s.get("status", "")).lower() == "rejected":
+            return True
+    return False
+
+
+async def apply_llm_monitoring(run, steps: list[dict]) -> None:
+    """Best-effort LLM monitor. Only runs for risky runs. Never raises."""
+    try:
+        if not has_risky_step(steps):
+            return
+        result = await score_run_llm(steps)
+        if not result:
+            return
+        run.llm_score = result["score"]
+        run.llm_reasoning = result["reasoning"]
+        if result["flagged"]:
+            run.flagged = True
+    except Exception as e:  # noqa: BLE001 - never break a run
+        logger.warning("LLM monitoring failed for run: %s", e, exc_info=True)
+        return
+
+
+def apply_anomaly_scoring(run, steps: list[dict]) -> None:
+    """Best-effort: write anomaly fields onto `run`. Prefer the supervised
+    attention model (better per-step localization); fall back to the LSTM NLL
+    scorer. Never raises."""
+    try:
+        result = None
+        if _attn_scorer.available:
+            result = _attn_scorer.score_run(steps)
+        if result is None and _scorer.available:
+            result = _scorer.score_run(steps)
+        if not result:
+            return
+        run.anomaly_score = result["anomaly_score"]
+        run.step_scores = result["step_scores"]
+        run.flagged = result["flagged"]
+        # the attention scorer also returns a human-readable reason
+        if result.get("reasoning") and hasattr(run, "llm_reasoning") and not getattr(run, "llm_reasoning", None):
+            run.llm_reasoning = result["reasoning"]
+    except Exception as e:  # noqa: BLE001 - scoring must never break a run
+        logger.warning("Anomaly scoring failed for run: %s", e, exc_info=True)
+        return
 
 
 def _iso(value: datetime | None) -> str | None:
@@ -29,6 +97,12 @@ def serialize_agent_run(run: AgentRun) -> dict:
         "final_response": run.final_response,
         "error": run.error,
         "metadata": run.metadata_,
+        "anomaly_score": getattr(run, "anomaly_score", None),
+        "step_scores": getattr(run, "step_scores", None),
+        "flagged": bool(getattr(run, "flagged", False)),
+        "data_label": getattr(run, "data_label", "unlabeled"),
+        "llm_score": getattr(run, "llm_score", None),
+        "llm_reasoning": getattr(run, "llm_reasoning", None),
         "created_at": _iso(run.created_at),
         "updated_at": _iso(run.updated_at),
         "completed_at": _iso(run.completed_at),
@@ -114,7 +188,64 @@ async def complete_agent_run(db: AsyncSession, run: AgentRun, final_response: st
     run.completed_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(run)
+    try:
+        await db.refresh(run, ["steps"])
+        steps = [
+            {"id": str(s.id),
+             "step_type": s.step_type.value if hasattr(s.step_type, "value") else str(s.step_type),
+             "name": s.name, "status": s.status}
+            for s in run.steps
+        ]
+        apply_anomaly_scoring(run, steps)
+        await db.commit()
+        await db.refresh(run)
+    except Exception as e:  # noqa: BLE001 - scoring is best-effort
+        logger.warning("Post-completion scoring failed — rolled back: %s", e, exc_info=True)
+        await db.rollback()
     return run
+
+
+_bg_tasks: set = set()
+
+
+async def score_run_llm_background(run_id) -> None:
+    """Run the LLM monitor for a completed run in its OWN session, off the
+    request's critical path. Best-effort — never raises."""
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    from app.core.database import async_session_factory
+
+    try:
+        async with async_session_factory() as db:
+            result = await db.execute(
+                select(AgentRun).options(selectinload(AgentRun.steps)).where(AgentRun.id == run_id)
+            )
+            run = result.scalar_one_or_none()
+            if run is None:
+                return
+            steps = [
+                {"id": str(s.id),
+                 "step_type": s.step_type.value if hasattr(s.step_type, "value") else str(s.step_type),
+                 "name": s.name, "status": s.status}
+                for s in run.steps
+            ]
+            await apply_llm_monitoring(run, steps)
+            await db.commit()
+    except Exception as e:  # noqa: BLE001 - background scoring must never surface
+        logger.warning("Background LLM scoring failed: %s", e, exc_info=True)
+        return
+
+
+def schedule_llm_monitoring(run_id) -> None:
+    """Fire-and-forget LLM monitoring so it never blocks the chat 'done' event."""
+    try:
+        task = asyncio.create_task(score_run_llm_background(run_id))
+        _bg_tasks.add(task)
+        task.add_done_callback(_bg_tasks.discard)
+    except RuntimeError:
+        # No running loop (e.g. in a sync test context) — skip silently.
+        pass
 
 
 async def fail_agent_run(db: AsyncSession, run: AgentRun, error: str) -> AgentRun:

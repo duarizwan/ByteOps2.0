@@ -1,0 +1,1 @@
+{"<PAD>": 0, "<UNK>": 1, "plan|none|completed": 2, "route|none|completed": 3, "tool_call|read|completed": 4, "approval|none|approved": 5, "tool_call|write|completed": 6, "tool_call|external_send|completed": 7, "final|none|completed": 8, "approval|none|completed": 9, "tool_call|read|failed": 10, "final|none|failed": 11}

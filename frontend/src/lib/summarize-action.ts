@@ -31,7 +31,7 @@ export function summarizeAction(run: AgentRun): ActionSummary {
     if (!step) {
         const anyTool = (run.steps ?? []).find((s) => s.step_type === "tool_call");
         return {
-            summary: `${run.intent} action completed`,
+            summary: run.final_response ? trunc(run.final_response, 80) : `${run.intent} action completed`,
             detail: anyTool ? humanize(anyTool.name) : humanize(run.intent),
         };
     }

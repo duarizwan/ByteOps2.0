@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useState, useRef, useEffect, useCallback, memo } from "react";
-import { Send, User, Paperclip, Mic, Mail, ExternalLink, Loader2, X, AlertCircle } from "lucide-react";
+import { Send, User, Paperclip, Mail, Loader2, X, AlertCircle } from "lucide-react";
 import { useAuth } from "@clerk/nextjs";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 import { useConversations, ConversationMessage } from "@/hooks/use-conversations";
+import { useRotatingLabel } from "@/hooks/useRotatingLabel";
 import { ByteOpsLogoMark } from "@/lib/brand-icons";
-import { useToolConnections } from "@/hooks/use-tool-connections";
 
 import { api } from "@/lib/api";
 import { classifyError } from "@/lib/classify-error";
@@ -219,9 +219,6 @@ const EmailCard = ({ data }: { data: EmailResult }) => {
                 <span className="text-xs text-muted-foreground truncate" title={data.from}>
                     From: {data.from.split("<")[0].trim()}
                 </span>
-                <button className="text-xs text-primary hover:underline flex items-center gap-1">
-                    View full <ExternalLink className="w-3 h-3" />
-                </button>
             </div>
             {data.snippet && (
                 <p className="text-xs text-muted-foreground mt-1 line-clamp-2 italic border-l-2 pl-2 border-primary/30">
@@ -235,9 +232,10 @@ const EmailCard = ({ data }: { data: EmailResult }) => {
 /* ========================
    Approval Card
    ======================== */
-function ApprovalCard({ approval, onApprove, onReject }: {
+function ApprovalCard({ approval, onApprove, onApproveAll, onReject }: {
     approval: ApprovalRequest;
     onApprove: () => void;
+    onApproveAll: () => void;
     onReject: () => void;
 }) {
     const riskBorder: Record<string, string> = {
@@ -256,12 +254,25 @@ function ApprovalCard({ approval, onApprove, onReject }: {
                     {JSON.stringify(approval.input, null, 2)}
                 </pre>
             )}
-            <div className="flex gap-2">
-                <button onClick={onApprove} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:opacity-90">
+
+            <div className="flex gap-2 items-center">
+                <button
+                    onClick={onApprove}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:opacity-90"
+                >
                     Approve
                 </button>
-                <button onClick={onReject} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20">
+                <button
+                    onClick={onReject}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20"
+                >
                     Reject
+                </button>
+                <button
+                    onClick={onApproveAll}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:opacity-90"
+                >
+                    Approve All
                 </button>
             </div>
         </div>
@@ -579,19 +590,20 @@ export function ChatInterface({
     const [isTyping, setIsTyping] = useState(false);
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
     const [stageContext, setStageContext] = useState("understanding");
-    const [stageVariantIdx, setStageVariantIdx] = useState(0);
+    const stagePool = ROTATING_LABELS[stageContext] ?? ROTATING_LABELS.understanding;
+    const [stageVariantIdx, resetStageVariantIdx] = useRotatingLabel(isTyping, stagePool.length);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const streamAbortRef = useRef<AbortController | null>(null);
+    // null = approve all remaining; number = how many more to auto-approve
+    const autoApproveRulesRef = useRef<Map<string, number | null>>(new Map());
     const [attachedFile, setAttachedFile] = useState<File | null>(null);
 
     const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
     const [pendingWorkflowDraft, setPendingWorkflowDraft] = useState<WorkflowDraft | null>(null);
     const [isApprovingWorkflowDraft, setIsApprovingWorkflowDraft] = useState(false);
     const [workflowDraftError, setWorkflowDraftError] = useState<string | null>(null);
-
-    const { connections } = useToolConnections();
 
     // Track whether we are actively streaming to pick the right scroll behavior.
     // "instant" during streaming prevents the scroll from fighting the rendering;
@@ -606,16 +618,6 @@ export function ChatInterface({
     useEffect(() => {
         scrollToBottom(isTyping);
     }, [messages, isTyping, scrollToBottom]);
-
-    // Rotate stage label every 1.8s while the agent is thinking
-    useEffect(() => {
-        if (!isTyping) { setStageVariantIdx(0); return; }
-        const pool = ROTATING_LABELS[stageContext] ?? ROTATING_LABELS.understanding;
-        const id = setInterval(() => {
-            setStageVariantIdx(i => (i + 1) % pool.length);
-        }, 1800);
-        return () => clearInterval(id);
-    }, [isTyping, stageContext]);
 
     // ── Ask AI bridge: auto-send message from workflow/notification panel ────────
     useEffect(() => {
@@ -683,7 +685,7 @@ export function ChatInterface({
         setAttachedFile(null);
         setIsTyping(true);
         setStageContext("understanding");
-        setStageVariantIdx(0);
+        resetStageVariantIdx();
         let chatTimeoutId: number | null = null;
 
         const userMessage: Message = {
@@ -696,7 +698,7 @@ export function ChatInterface({
         const assistantMessageId = (Date.now() + 1).toString();
 
         setMessages((prev) => [
-            ...prev,
+            ...prev.filter(msg => !(msg.role === "assistant" && !msg.content && !msg.errorClass)),
             userMessage,
             { id: assistantMessageId, role: "assistant", content: "", timestamp: new Date(), toolCalls: [], stage: "active" },
         ]);
@@ -770,14 +772,27 @@ export function ChatInterface({
                             }
 
                             if (event.type === "approval_required") {
-                                setPendingApproval({
+                                const incomingApproval: ApprovalRequest = {
                                     run_id: event.run_id,
                                     tool: event.tool,
                                     action: event.action,
                                     input: event.input || {},
                                     risk: event.risk,
                                     reason: event.reason,
-                                });
+                                };
+                                const ruleKey = `${event.tool}:${event.action}`;
+                                const remaining = autoApproveRulesRef.current.get(ruleKey);
+                                if (remaining === null) {
+                                    // approve all — no limit
+                                    handleApprove(incomingApproval);
+                                } else if (typeof remaining === "number" && remaining > 0) {
+                                    // chunk — decrement counter
+                                    if (remaining - 1 === 0) autoApproveRulesRef.current.delete(ruleKey);
+                                    else autoApproveRulesRef.current.set(ruleKey, remaining - 1);
+                                    handleApprove(incomingApproval);
+                                } else {
+                                    setPendingApproval(incomingApproval);
+                                }
                             }
                             if (event.type === "workflow_draft") {
                                 setPendingWorkflowDraft({
@@ -813,7 +828,7 @@ export function ChatInterface({
                                     } else if (event.type === "tool_call_start") {
                                         const toolCtx = event.tool?.split(":")?.[0] ?? "routing";
                                         setStageContext(ROTATING_LABELS[toolCtx] ? toolCtx : "routing");
-                                        setStageVariantIdx(0);
+                                        resetStageVariantIdx();
                                         newStage = "active";
                                         newToolCalls.push({
                                             tool: event.tool,
@@ -829,7 +844,7 @@ export function ChatInterface({
                                         }
                                     } else if (event.type === "approval_required") {
                                         setStageContext("awaiting");
-                                        setStageVariantIdx(0);
+                                        resetStageVariantIdx();
                                         newStage = "active";
                                     } else if (event.type === "workflow_draft") {
                                         newContent = workflowDraftAssistantContent(event);
@@ -845,7 +860,7 @@ export function ChatInterface({
                                 })
                             );
                         } catch (e) {
-                            console.error("Failed to parse SSE JSON:", e, dataStr);
+                            console.warn("Failed to parse SSE JSON:", e, dataStr);
                         }
                     }
                 }
@@ -863,8 +878,10 @@ export function ChatInterface({
                 );
             }
         } catch (error) {
-            console.error("Chat error:", error);
             const isAbortError = error instanceof Error && error.name === "AbortError";
+            if (!isAbortError) {
+                console.error("Chat error:", error);
+            }
             setMessages((prev) =>
                 prev.map((msg) =>
                     msg.id === assistantMessageId
@@ -877,36 +894,54 @@ export function ChatInterface({
                 window.clearTimeout(chatTimeoutId);
             }
             streamAbortRef.current = null;
+            autoApproveRulesRef.current = new Map();
             setIsTyping(false);
         }
     };
 
-    const handleApprove = async () => {
-        if (!pendingApproval) return;
+    const handleApprove = useCallback(async (approvalOverride?: ApprovalRequest) => {
+        const approval = approvalOverride ?? pendingApproval;
+        if (!approval?.run_id) return;
         try {
             const token = await getToken();
             const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-            const response = await fetch(apiBase + "/api/agent-runs/" + pendingApproval.run_id + "/approve", {
+            const response = await fetch(apiBase + "/api/agent-runs/" + approval.run_id + "/approve", {
                 method: "POST",
                 headers: { Authorization: "Bearer " + token },
             });
             if (!response.ok) throw new Error("Approval failed");
-            setPendingApproval(null);
+            if (!approvalOverride) setPendingApproval(null);
             setMessages((prev) => [
                 ...prev,
                 {
                     id: Date.now().toString(),
                     role: "assistant",
-                    content: `Action approved. ${pendingApproval.tool} → ${pendingApproval.action} is now running.`,
+                    content: `Action approved. ${approval.tool} → ${approval.action} is now running.`,
                     timestamp: new Date(),
                 },
             ]);
         } catch {
-            setMessages((prev) => [
-                ...prev,
-                { id: Date.now().toString(), role: "assistant", content: "", timestamp: new Date(), errorClass: "unknown" },
-            ]);
+            if (approvalOverride) {
+                // Auto-approve failed — show the card so user can approve manually
+                setPendingApproval(approvalOverride);
+            } else {
+                setMessages((prev) => [
+                    ...prev,
+                    { id: Date.now().toString(), role: "assistant", content: "", timestamp: new Date(), errorClass: "unknown" },
+                ]);
+            }
         }
+    }, [getToken, pendingApproval]);
+
+    const approveCurrent = useCallback(() => {
+        void handleApprove();
+    }, [handleApprove]);
+
+    const handleApproveAll = async () => {
+        if (!pendingApproval) return;
+        const ruleKey = `${pendingApproval.tool}:${pendingApproval.action}`;
+        autoApproveRulesRef.current.set(ruleKey, null);
+        await handleApprove();
     };
 
     const handleReject = async () => {
@@ -920,10 +955,15 @@ export function ChatInterface({
             });
             if (!response.ok) throw new Error("Rejection failed");
             setPendingApproval(null);
-        } catch {
             setMessages((prev) => [
                 ...prev,
-                { id: Date.now().toString(), role: "assistant", content: "", timestamp: new Date(), errorClass: "unknown" },
+                { id: Date.now().toString(), role: "assistant", content: "Approval rejected.", timestamp: new Date() },
+            ]);
+        } catch {
+            setPendingApproval(null);
+            setMessages((prev) => [
+                ...prev,
+                { id: Date.now().toString(), role: "assistant", content: "Approval rejected.", timestamp: new Date() },
             ]);
         }
     };
@@ -1025,7 +1065,8 @@ export function ChatInterface({
                     {pendingApproval && (
                         <ApprovalCard
                             approval={pendingApproval}
-                            onApprove={handleApprove}
+                            onApprove={approveCurrent}
+                            onApproveAll={handleApproveAll}
                             onReject={handleReject}
                         />
                     )}
@@ -1099,11 +1140,9 @@ export function ChatInterface({
                         >
                             <Paperclip className="w-5 h-5" />
                         </button>
-                        <button className="text-muted-foreground hover:text-foreground rounded-xl p-2 transition-colors">
-                            <Mic className="w-5 h-5" />
-                        </button>
                         <button
                             onClick={() => handleSend()}
+                            aria-label="Send message"
                             disabled={(!input.trim() && !attachedFile) || isTyping || isLoadingHistory}
                             className="gradient-primary hover:shadow-glow p-2 rounded-xl text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-shadow"
                         >

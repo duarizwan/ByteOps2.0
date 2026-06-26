@@ -31,6 +31,7 @@ class User(Base):
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
     workflows = relationship("Workflow", back_populates="user", cascade="all, delete-orphan")
     agent_runs = relationship("AgentRun", back_populates="user", cascade="all, delete-orphan")
+    hired_agents = relationship("HiredAgent", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<User {self.email}>"

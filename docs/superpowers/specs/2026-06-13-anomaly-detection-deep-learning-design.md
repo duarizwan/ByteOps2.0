@@ -93,3 +93,63 @@ Single-layer causal LSTM, hidden 32–64, embedding 32, `max_len` ≈ 12, dropou
 ## 9. Out of scope
 
 Synthetic data of any kind, attention-based supervised classifier, transformer comparison, SHAP, real-time per-step streaming scores (post-completion scoring only for v1), auto-retraining pipelines, multi-tenant model isolation.
+
+---
+
+# Addendum (2026-06-13): Non-technical-first UX principle (governing constraint)
+
+ByteOps's core purpose is to unify many platforms into one interface usable by **both technical and non-technical employees**. Therefore every feature in this spec — anomaly scores, agent cards, dependency graphs, audit trails — is governed by **role-based progressive disclosure**. This is a hard constraint, not a preference.
+
+**Three personas, three surfaces:**
+- **Non-technical employee (default):** sees only the chat box, a plain-language activity feed (✓ Done / ⏸ Needs your approval), and human-worded approval prompts. Never sees run graphs, suspicion scores, NLL, dependency graphs, or any ML/jargon. The anomaly detection reaches them ONLY as a plain-language safety prompt (e.g. "This would send a file to an outside address — approve or cancel?").
+- **Technical / power user:** the above plus the workflow builder and the `/runs` trace graph.
+- **Admin / governance:** the above plus Agent Cards, dependency/blast-radius graph, audit trail, and numeric suspicion scores. (Paper 2's Agent Card is explicitly a governance artifact, not an end-user one.)
+
+**Implementation rules:**
+1. All technical/governance UI (suspicion numbers, graphs, cards) lives behind an explicit Advanced/Admin surface — never on the default chat view.
+2. Plain language only on the non-technical surface: "I checked your email," not "tool_call: search_emails".
+3. A role/view flag decides what renders; non-technical accounts do not render `/runs` internals.
+4. Templates and sensible defaults over blank canvas + settings.
+
+Every UI task below MUST state which persona surface it targets.
+
+---
+
+# Addendum (2026-06-13): LLM-monitor track + governance features
+
+Grounded in two papers the user supplied: **Storf et al., "Constitutional Black-Box Monitoring for Scheming in LLM Agents"** (Apollo Research/MATS, ICML 2026) — the intellectual parent of agentsop — and **Elsayed & Jones, "Agentic Explainability at Scale" (XAI at Scale)** (Credo AI, 2026). Decisions confirmed with the user.
+
+## A. Why this addendum
+
+Paper 1's actual method is **not** a trained small model — it is an **LLM black-box monitor**: a prompted frontier model that reads only externally observable actions (user message, tool calls, tool outputs — no chain-of-thought) and emits a **1–10 suspicion score**. Key findings adopted here: graded 1–10 scoring beats binary; evaluate at low false-positive rate using **partial AUROC (FPR < 0.2)**; performance **saturates with light optimization** (so heavy tuning is unnecessary and overfits); label positives by **verifiable outcome**, not guessed intent.
+
+Decision: **keep the self-supervised LSTM as the trained-DL course contribution AND add an LLM-monitor track.** This yields a three-way comparison (LSTM vs Isolation Forest vs LLM-monitor), a detector that works with **zero training data** (solving the 63-run scarcity problem), and a stronger report. Paper 2 supplies the governance UX that turns ByteOps into the platform that operationalizes detection.
+
+## B. LLM black-box monitor (new detector)
+
+- **`backend/app/anomaly/constitution.py`** — a natural-language "anomaly constitution" for ByteOps: what counts as anomalous (forwarding/exfiltrating externally, privilege escalation, reading secrets, skipping validation, tool-repetition, acting before context). Drives both the monitor prompt and red-team labeling.
+- **`backend/app/anomaly/llm_monitor.py`** — `score_run_llm(steps) -> {score:1-10, reasoning, flagged}` using the existing `app.core.llm_client.get_llm_client().create_message(system=CONSTITUTION_PROMPT, messages=[trajectory])`. Action-only: serialize tool calls + outcomes, never CoT. Parses an integer 1–10; defaults to 5 on parse failure (per Paper 1). Best-effort, async, never blocks a run.
+- Reference prompts from Paper 1 Appendix G are adapted as the starting monitor prompt (no heavy optimization — the paper shows it saturates).
+- Scoring scale standardized to **1–10** across LSTM (normalized NLL), Isolation Forest, and LLM-monitor; evaluation reports **pAUROC at FPR<0.2** alongside F1.
+- Cost control: LLM-monitor runs async in the background; may be gated to runs containing write/external/destructive steps (cheap LSTM pre-filters which runs get the expensive LLM look).
+
+## C. Governance features (Paper 2) — all in the existing Tailwind/XYFlow theme
+
+1. **Suspicion score on the trace** — 1–10 score surfaced on the run graph (upgrade of the planned heat overlay).
+2. **Agent Card panel** — per-run "nutrition label": risk level, tools/MCPs touched, autonomy level, evidence of least privilege, human-in-the-loop status, suspicion score. Reuses existing card components.
+3. **Dependency / blast-radius graph** — extend the existing XYFlow run graph to show tool/agent→tool chains and highlight blast radius of flagged steps.
+4. **Audit trail + kill switch** — surface the existing `agent_run` ledger as a first-class audit trail and the existing approval gates as an explicit kill switch.
+
+## D. Security & scalability notes folded in
+
+- Least-privilege evidence on the Agent Card; record granted OAuth scopes per tool.
+- Move secrets (OAuth tokens) to a secrets manager; no permission inheritance across tools.
+- LLM-monitor scoring in a background worker/queue; Redis for shared cache when scaling to multiple instances; sample/pre-filter to control LLM cost.
+
+## E. External tools
+
+Outlook (and similar) follow the existing per-tool MCP + OAuth pattern via Microsoft Graph (Azure AD app). OAuth2 stays the default for user-delegated access; **service accounts / client-credentials** are the alternative for tenant-wide machine access (and the cleaner answer to permission-inheritance risk); API-key/PAT already supported for providers that issue keys.
+
+## F. Updated honest limitations
+
+The coarse `{step_type|risk|status}` LSTM token cannot see tool-call *content*, so the LSTM catches structural/ordering anomalies while missing semantic "scheming" (a plausible-looking call with a malicious payload). That gap is exactly what the LLM-monitor fills — stated as the motivation for the comparison, not a defect.

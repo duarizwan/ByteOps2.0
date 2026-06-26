@@ -1,7 +1,9 @@
 """ByteOps backend application configuration."""
 
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from functools import lru_cache
+from typing import Any
 
 
 class Settings(BaseSettings):
@@ -14,6 +16,12 @@ class Settings(BaseSettings):
     # --- Database (Neon PostgreSQL) ---
     database_url: str = "postgresql+asyncpg://localhost/byteops"
 
+    # --- Secrets ---
+    # Fernet key (generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())").
+    # When set, OAuth tokens are encrypted at rest. When empty, tokens are stored
+    # plaintext (legacy behavior) — set this in production.
+    token_encryption_key: str = ""
+
     # --- Clerk Authentication ---
     clerk_secret_key: str = ""
     clerk_webhook_secret: str = ""
@@ -25,7 +33,9 @@ class Settings(BaseSettings):
     backend_cors_origins: str = "http://localhost:3000"
 
     # --- AI / LLM ---
-    # Set whichever key is active; first present wins: Claude > Gemini > Groq
+    # LLM_PROVIDER can be "auto", "claude", "gemini", or "groq".
+    # In auto mode, first present key wins: Claude > Gemini > Groq.
+    llm_provider: str = "auto"
     claude_api_key: str = ""
     gemini_api_key: str = ""
     groq_api_key: str = ""
@@ -66,7 +76,19 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins(self) -> list[str]:
-        return [origin.strip() for origin in self.backend_cors_origins.split(",")]
+        origins = [origin.strip() for origin in self.backend_cors_origins.split(",") if origin.strip()]
+        # Always allow localhost in development so missing .env doesn't block local work
+        for local in ("http://localhost:3000", "http://127.0.0.1:3000"):
+            if local not in origins:
+                origins.append(local)
+        return origins
+
+    @field_validator("debug", mode="before")
+    @classmethod
+    def normalize_debug(cls, value: Any) -> Any:
+        if isinstance(value, str) and value.lower() in {"release", "prod", "production"}:
+            return False
+        return value
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

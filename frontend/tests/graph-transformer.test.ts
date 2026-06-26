@@ -39,7 +39,7 @@ function makeStep(
 
 describe("graphTransformer", () => {
     it("empty steps → produces user_input + final_response synthetic nodes", () => {
-        const { nodes, edges } = graphTransformer(makeRun({ steps: [] }));
+        const { nodes } = graphTransformer(makeRun({ steps: [] }));
         expect(nodes.length).toBe(2);
         expect(nodes[0].data.nodeType).toBe("user_input");
         expect(nodes[1].data.nodeType).toBe("final_response");
@@ -106,7 +106,7 @@ describe("graphTransformer", () => {
                 makeStep("s2", "plan", "agent_plan"),
             ],
         });
-        const { nodes, edges } = graphTransformer(run);
+        const { edges } = graphTransformer(run);
         // user_input → s1 → s2 → final_response
         expect(edges.length).toBe(3);
         const s1s2 = edges.find((e) => e.source === "s1" && e.target === "s2");
@@ -143,11 +143,11 @@ describe("graphTransformer", () => {
         });
     });
 
-    it("node label uses step name in monospace-friendly format", () => {
+    it("node label uses human-friendly step name", () => {
         const run = makeRun({ steps: [makeStep("s1", "tool_call", "search_emails")] });
         const { nodes } = graphTransformer(run);
         const node = nodes.find((n) => n.id === "s1")!;
-        expect(node.data.label).toBe("search_emails");
+        expect(node.data.label).toBe("Search Emails");
     });
 
     it("node has typeColor set based on type", () => {
