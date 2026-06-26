@@ -72,7 +72,7 @@ function HireModal({
 }: {
     template: AgentTemplate;
     onClose: () => void;
-    onHire: (name: string, config: Record<string, unknown>, schedule: string) => Promise<void>;
+    onHire: (name: string, config: Record<string, unknown>, schedule: string) => Promise<unknown>;
 }) {
     const [name, setName] = useState(template.name);
     const [schedule, setSchedule] = useState(template.default_schedule);
