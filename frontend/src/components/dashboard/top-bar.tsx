@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { UserButton } from "@clerk/nextjs";
+import { UserButton, ClerkLoaded, ClerkLoading } from "@clerk/nextjs";
 import { Sun, Moon, Settings, HelpCircle } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { ByteOpsLogoMark } from "@/lib/brand-icons";
@@ -142,13 +142,18 @@ export function TopBar() {
                 </Link>
 
                 {/* User Avatar (Clerk) */}
-                <UserButton
-                    appearance={{
-                        elements: {
-                            avatarBox: "w-9 h-9 rounded-xl",
-                        },
-                    }}
-                />
+                <ClerkLoading>
+                    <div className="w-9 h-9 rounded-xl bg-muted animate-pulse" />
+                </ClerkLoading>
+                <ClerkLoaded>
+                    <UserButton
+                        appearance={{
+                            elements: {
+                                avatarBox: "w-9 h-9 rounded-xl",
+                            },
+                        }}
+                    />
+                </ClerkLoaded>
             </div>
         </div>
     );
